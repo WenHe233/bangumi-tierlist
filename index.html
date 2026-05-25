@@ -148,6 +148,19 @@ h1 .sub{color:var(--text-dim);font-size:.7em;margin-left:8px;font-weight:normal;
   background:linear-gradient(transparent,rgba(0,0,0,.85));color:#fff;font-size:.72em;
   line-height:1.15;max-height:60%;overflow:hidden;display:none;pointer-events:none;}
 body.show-titles .card-title{display:block;}
+
+/* 导出 PNG 时临时套用：隐藏编辑控件、压缩标题样式 */
+body.exporting .tier-row-tools{display:none !important;}
+body.exporting .tier-label-text{font-size:1.15em;}
+body.exporting .card-title{
+  font-size:.56em;
+  max-height:none;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  padding:1px 4px;
+  line-height:1.2;
+}
 .card-badge{position:absolute;top:2px;right:2px;background:var(--accent-2);color:#000;
   font-size:.6em;font-weight:bold;padding:1px 4px;border-radius:2px;line-height:1;pointer-events:none;}
 .card-del{position:absolute;top:2px;left:2px;width:16px;height:16px;border:none;
@@ -256,6 +269,7 @@ footer a{color:var(--text-dim);}
   <div class="group">
     <span class="group-title">导出 / 分享</span>
     <button id="btnExportPNG">导出 PNG</button>
+    <button id="btnCopyPNG">复制 PNG</button>
     <button id="btnShareURL">分享链接</button>
     <button id="btnExportJSON">导出 JSON</button>
     <button id="btnImportJSON">导入 JSON</button>
@@ -1062,14 +1076,24 @@ function syncStateFromDOM(evt){
 }
 
 /* ============================== 导出 / 分享 ============================== */
+async function renderTierBoardCanvas(){
+  document.body.classList.add("exporting");
+  // 等一帧让浏览器应用 body.exporting 的样式后再截图
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  try{
+    return await html2canvas($("#tierBoard"), {
+      backgroundColor:"#1b1f27", useCORS:true, allowTaint:false, scale:2, logging:false,
+    });
+  } finally {
+    document.body.classList.remove("exporting");
+  }
+}
+
 async function exportPNG(){
   if (typeof html2canvas === "undefined"){ toast("html2canvas 未加载"); return; }
   toast("正在生成图片…");
-  // 临时确保 tier 行下面有 tray 也截到？只截 tier board。
   try{
-    const canvas = await html2canvas($("#tierBoard"), {
-      backgroundColor:"#1b1f27", useCORS:true, allowTaint:false, scale:2, logging:false,
-    });
+    const canvas = await renderTierBoardCanvas();
     canvas.toBlob(blob => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -1079,6 +1103,23 @@ async function exportPNG(){
       toast("已导出 PNG");
     }, "image/png");
   }catch(e){ toast("导出失败：" + e.message); }
+}
+
+async function copyPNG(){
+  if (typeof html2canvas === "undefined"){ toast("html2canvas 未加载"); return; }
+  if (!navigator.clipboard || !navigator.clipboard.write || typeof ClipboardItem === "undefined"){
+    toast("浏览器不支持复制图片到剪贴板，请用「导出 PNG」"); return;
+  }
+  toast("正在生成图片…");
+  try{
+    const canvas = await renderTierBoardCanvas();
+    canvas.toBlob(async blob => {
+      try{
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        toast("已复制到剪贴板");
+      }catch(e){ toast("复制失败：" + e.message); }
+    }, "image/png");
+  }catch(e){ toast("生成失败：" + e.message); }
 }
 
 function buildShareURL(){
@@ -1409,6 +1450,7 @@ function bindEvents(){
   });
   // 导出
   $("#btnExportPNG").addEventListener("click", exportPNG);
+  $("#btnCopyPNG").addEventListener("click", copyPNG);
   $("#btnShareURL").addEventListener("click", () => {
     const url = buildShareURL();
     showShareURL(url);

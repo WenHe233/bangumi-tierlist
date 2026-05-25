@@ -241,7 +241,6 @@ footer a{color:var(--text-dim);}
       <label><input type="checkbox" value="movie">剧场</label>
       <label><input type="checkbox" value="ova">OVA</label>
     </fieldset>
-    <button id="btnLoad" class="primary">载入</button>
   </div>
 
   <div class="group">
@@ -1400,11 +1399,16 @@ function bindEvents(){
     state.cardMode = state.cardMode === "cover-title" ? "cover-only" : "cover-title";
     updateCardModeClass(); saveSettings();
   });
-  // 载入
-  $("#btnLoad").addEventListener("click", () => loadCurrentSelection({keepUploads:true, keepTierStructure:true}));
+  // 数据源选择 — 实时生效
+  const reloadSelection = () => loadCurrentSelection({keepUploads:true, keepTierStructure:true});
   $("#yearSelect").addEventListener("change", () => {
     state.currentYear = parseInt($("#yearSelect").value, 10);
     updateSeasonAvailability();
+    reloadSelection();
+  });
+  $("#seasonSelect").addEventListener("change", reloadSelection);
+  $$("#typeFilter input[type=checkbox]").forEach(cb => {
+    cb.addEventListener("change", reloadSelection);
   });
   // 行操作
   $("#btnAddRow").addEventListener("click", addRow);
@@ -1412,10 +1416,6 @@ function bindEvents(){
   let _q;
   $("#traySearch").addEventListener("input", () => {
     clearTimeout(_q); _q = setTimeout(applyTraySearch, 80);
-  });
-  // 类型过滤即时同步（不自动重载，仍需点载入）
-  $$("#typeFilter input[type=checkbox]").forEach(cb => {
-    cb.addEventListener("change", () => { state.typeFilter[cb.value] = cb.checked; saveSettings(); });
   });
   // 存档
   $("#slotSelect").addEventListener("change", e => {

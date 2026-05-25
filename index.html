@@ -1,0 +1,1509 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer">
+<title>新番 Tier Maker</title>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/cn2t.js"></script>
+<style>
+:root{
+  --bg:#0f1115;
+  --panel:#1b1f27;
+  --panel-2:#222732;
+  --border:rgba(255,255,255,.12);
+  --text:#e8e8ea;
+  --text-dim:#9aa0a8;
+  --accent:#5bc0de;
+  --accent-2:#f0ad4e;
+  --danger:#e74c3c;
+  --tier-w:120px;
+  --card-w:84px;
+  --card-h:118px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+  font-family:"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;font-size:14px;
+  background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);
+  background-size:40px 40px;min-height:100vh;
+}
+#app{max-width:1280px;margin:0 auto;padding:14px;}
+h1{font-size:1.25em;margin:0 0 8px 4px;letter-spacing:.5px;}
+h1 .sub{color:var(--text-dim);font-size:.7em;margin-left:8px;font-weight:normal;}
+
+#appHeader{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;}
+#globalControls{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+#globalControls select,#globalControls button{background:var(--panel);color:var(--text);
+  border:1px solid var(--border);padding:5px 10px;border-radius:4px;cursor:pointer;}
+#globalControls select:hover,#globalControls button:hover{border-color:var(--accent);}
+
+#controlPanel{background:var(--panel);border:1px solid var(--border);border-radius:6px;
+  padding:12px 14px;margin-bottom:14px;display:grid;gap:10px;
+  grid-template-columns:repeat(auto-fit,minmax(260px,1fr));}
+#controlPanel .group{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+#controlPanel .group-title{font-size:.78em;color:var(--text-dim);width:100%;margin-bottom:2px;letter-spacing:.5px;}
+#controlPanel select,#controlPanel input[type=text],#controlPanel input:not([type]){
+  background:var(--panel-2);color:var(--text);border:1px solid var(--border);
+  padding:5px 8px;border-radius:4px;outline:none;min-width:0;}
+#controlPanel select:focus,#controlPanel input:focus{border-color:var(--accent);}
+#controlPanel button{background:var(--panel-2);color:var(--text);border:1px solid var(--border);
+  padding:5px 10px;border-radius:4px;cursor:pointer;}
+#controlPanel button:hover{border-color:var(--accent);}
+#controlPanel button.primary{background:var(--accent);color:#000;border-color:var(--accent);font-weight:bold;}
+#controlPanel button.danger{color:var(--danger);border-color:rgba(231,76,60,.4);}
+#controlPanel button.danger:hover{background:rgba(231,76,60,.15);}
+#typeFilter{border:1px solid var(--border);border-radius:4px;padding:4px 8px;display:flex;gap:8px;align-items:center;}
+#typeFilter legend{display:none;}
+#typeFilter label{display:flex;align-items:center;gap:3px;cursor:pointer;font-size:.9em;}
+#uploadUrlInput{flex:1;min-width:160px;}
+#uploadHint{color:var(--text-dim);font-size:.78em;width:100%;}
+
+#tierBoard{background:var(--panel);border:1px solid var(--border);border-radius:6px;
+  padding:6px;margin-bottom:14px;}
+.tier-row{display:flex;align-items:stretch;gap:0;border-radius:4px;margin-bottom:4px;
+  background:var(--panel-2);overflow:hidden;}
+.tier-label{flex:0 0 var(--tier-w);min-height:calc(var(--card-h) + 8px);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:4px;padding:6px 4px;position:relative;}
+.tier-label-text{background:transparent;border:none;outline:none;text-align:center;
+  font-weight:bold;font-size:1.4em;color:inherit;width:100%;max-width:104px;}
+.tier-label-text:focus{background:rgba(0,0,0,.18);border-radius:3px;}
+.tier-row-tools{display:flex;gap:2px;opacity:.7;}
+.tier-row-tools button{background:rgba(0,0,0,.3);color:inherit;border:none;border-radius:2px;
+  width:20px;height:20px;font-size:11px;cursor:pointer;line-height:1;padding:0;}
+.tier-row-tools button:hover{background:rgba(0,0,0,.5);}
+.tier-row-tools input[type=color]{width:20px;height:20px;border:none;background:none;cursor:pointer;padding:0;}
+.tier-cards{flex:1 1 auto;display:flex;flex-wrap:wrap;gap:4px;padding:4px;min-height:calc(var(--card-h) + 8px);
+  background:rgba(0,0,0,.18);align-content:flex-start;}
+.tier-cards:empty::before{content:"拖动卡片到这里";color:var(--text-dim);font-size:.8em;
+  align-self:center;padding-left:8px;pointer-events:none;}
+#btnAddRow{display:block;width:100%;background:transparent;border:1px dashed var(--border);
+  color:var(--text-dim);border-radius:4px;padding:6px;cursor:pointer;margin-top:6px;}
+#btnAddRow:hover{color:var(--text);border-color:var(--accent);}
+
+#trayPanel{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:10px 12px;}
+
+/* --- 双视图布局：默认垂直堆叠（同窄屏行为兜底） --- */
+#mainArea{display:flex;flex-direction:column;gap:14px;}
+
+/* --- 窄屏：托盘 fixed 在视口底部 --- */
+@media (max-width:1099px){
+  #trayPanel{
+    position:fixed;left:0;right:0;bottom:0;
+    max-height:38vh;overflow-y:auto;
+    z-index:50;border-radius:6px 6px 0 0;
+    box-shadow:0 -6px 20px rgba(0,0,0,.55);
+    margin:0;
+  }
+  #app{padding-bottom:42vh;}
+  #toast{bottom:calc(40vh + 12px);}
+}
+
+/* --- 宽屏：左右分栏，托盘 sticky 在顶部 --- */
+@media (min-width:1100px){
+  #mainArea{
+    flex-direction:row;
+    align-items:flex-start;
+    gap:14px;
+  }
+  #tierColumn{flex:3 1 0%;min-width:0;}
+  #trayPanel{
+    flex:2 1 0%;
+    min-width:320px;max-width:520px;
+    position:sticky;top:14px;
+    max-height:calc(100vh - 28px);
+    overflow-y:auto;
+    align-self:flex-start;
+  }
+}
+#trayHeader{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;}
+#trayHeader h2{font-size:1em;margin:0;color:var(--text-dim);font-weight:normal;}
+#traySearch{flex:1;min-width:160px;background:var(--panel-2);color:var(--text);
+  border:1px solid var(--border);padding:5px 10px;border-radius:4px;outline:none;}
+#traySearch:focus{border-color:var(--accent);}
+#trayCount{color:var(--text-dim);font-size:.85em;}
+#trayCards{display:flex;flex-wrap:wrap;gap:4px;min-height:calc(var(--card-h) + 8px);
+  background:rgba(0,0,0,.18);border-radius:4px;padding:4px;align-content:flex-start;}
+
+/* cards */
+.card{width:var(--card-w);height:var(--card-h);position:relative;border-radius:3px;
+  background:#000;overflow:hidden;cursor:grab;user-select:none;touch-action:none;
+  contain:content;contain-intrinsic-size: var(--card-w) var(--card-h);
+  flex:0 0 auto;}
+.card.sortable-chosen{cursor:grabbing;}
+.card.sortable-ghost{opacity:.35;}
+.card.is-missing{background:#2b2f38;}
+.card.is-missing .card-cover{display:none;}
+.card.is-missing::after{content:"已下架";color:var(--text-dim);position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;font-size:.78em;}
+.card.is-phantom{background:repeating-linear-gradient(45deg,#2b2f38,#2b2f38 6px,#23262d 6px,#23262d 12px);}
+.card.is-phantom::after{content:"[本地图]";color:var(--text-dim);position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;font-size:.72em;}
+.card.is-phantom .card-cover{display:none;}
+.card.hidden{display:none;}
+.card-cover{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;}
+.card-title{position:absolute;left:0;right:0;bottom:0;padding:2px 4px;
+  background:linear-gradient(transparent,rgba(0,0,0,.85));color:#fff;font-size:.72em;
+  line-height:1.15;max-height:60%;overflow:hidden;display:none;pointer-events:none;}
+body.show-titles .card-title{display:block;}
+.card-badge{position:absolute;top:2px;right:2px;background:var(--accent-2);color:#000;
+  font-size:.6em;font-weight:bold;padding:1px 4px;border-radius:2px;line-height:1;pointer-events:none;}
+.card-del{position:absolute;top:2px;left:2px;width:16px;height:16px;border:none;
+  background:rgba(0,0,0,.6);color:#fff;border-radius:50%;cursor:pointer;font-size:11px;
+  line-height:14px;padding:0;display:none;}
+.card.is-upload:hover .card-del{display:block;}
+
+/* drag overlay */
+#dropOverlay{position:fixed;inset:0;background:rgba(0,0,0,.7);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:2em;
+  z-index:9999;pointer-events:none;border:4px dashed var(--accent);}
+#dropOverlay[hidden]{display:none;}
+
+/* toast */
+#toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%);background:#000;
+  color:#fff;padding:8px 16px;border-radius:4px;border:1px solid var(--border);
+  opacity:0;transition:opacity .25s;pointer-events:none;z-index:10000;max-width:80%;}
+#toast.show{opacity:.95;}
+
+/* loading */
+#loadingBar{position:fixed;left:0;top:0;height:3px;background:var(--accent);
+  width:0;transition:width .3s;z-index:10001;}
+
+/* modal */
+#modalOverlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;
+  align-items:center;justify-content:center;z-index:9998;}
+#modalOverlay[hidden]{display:none;}
+#modalBox{background:var(--panel);border:1px solid var(--border);border-radius:6px;
+  padding:20px;max-width:90%;width:480px;}
+#modalBox h3{margin:0 0 12px;}
+#modalBox input[type=text]{width:100%;background:var(--panel-2);color:var(--text);
+  border:1px solid var(--border);padding:6px 10px;border-radius:4px;outline:none;margin-bottom:12px;}
+#modalBox .actions{display:flex;justify-content:flex-end;gap:8px;}
+#modalBox button{background:var(--panel-2);color:var(--text);border:1px solid var(--border);
+  padding:5px 12px;border-radius:4px;cursor:pointer;}
+#modalBox button.primary{background:var(--accent);color:#000;border-color:var(--accent);}
+#modalBox .shareUrlBox{word-break:break-all;background:var(--panel-2);padding:8px;
+  border-radius:4px;border:1px solid var(--border);max-height:160px;overflow:auto;
+  font-family:monospace;font-size:.85em;margin-bottom:12px;}
+#modalBox .hint{color:var(--text-dim);font-size:.85em;margin-bottom:10px;}
+
+footer{margin-top:20px;text-align:center;color:var(--text-dim);font-size:.8em;padding:10px;}
+footer a{color:var(--text-dim);}
+
+@media(max-width:700px){
+  :root{--tier-w:60px;--card-w:64px;--card-h:90px;}
+  .tier-label-text{font-size:1.1em;}
+  #appHeader h1{font-size:1.05em;}
+}
+</style>
+</head>
+<body>
+<div id="loadingBar"></div>
+<div id="app">
+
+<header id="appHeader">
+  <h1>新番 Tier Maker <span class="sub">为指定季度/整年新番做 S 到 F 评级</span></h1>
+  <div id="globalControls">
+    <select id="langSelect" title="标题语言">
+      <option value="zh-Hans">简体中文</option>
+      <option value="zh-Hant">繁體中文</option>
+      <option value="en">English</option>
+      <option value="ja">日本語</option>
+    </select>
+    <button id="cardModeToggle" title="切换卡片显示模式">封面+标题</button>
+  </div>
+</header>
+
+<section id="controlPanel">
+  <div class="group">
+    <span class="group-title">数据源</span>
+    <select id="yearSelect"></select>
+    <select id="seasonSelect">
+      <option value="1">1月</option>
+      <option value="2">4月</option>
+      <option value="3">7月</option>
+      <option value="4">10月</option>
+      <option value="0">整年</option>
+    </select>
+    <fieldset id="typeFilter">
+      <legend>类型</legend>
+      <label><input type="checkbox" value="tv" checked>TV</label>
+      <label><input type="checkbox" value="web" checked>Web</label>
+      <label><input type="checkbox" value="movie">剧场</label>
+      <label><input type="checkbox" value="ova">OVA</label>
+    </fieldset>
+    <button id="btnLoad" class="primary">载入</button>
+  </div>
+
+  <div class="group">
+    <span class="group-title">存档</span>
+    <select id="slotSelect"><option value="">— 未选择 —</option></select>
+    <button id="btnSaveAs">另存为</button>
+    <button id="btnSave">保存</button>
+    <button id="btnDeleteSlot" class="danger">删除</button>
+  </div>
+
+  <div class="group">
+    <span class="group-title">上传图片</span>
+    <button id="btnUploadFile">+ 选文件</button>
+    <input type="file" id="uploadFileInput" accept="image/*" multiple hidden>
+    <input id="uploadUrlInput" type="text" placeholder="或粘贴图片 URL 后回车">
+    <span id="uploadHint">也可直接把图片拖进窗口或 Ctrl+V 粘贴</span>
+  </div>
+
+  <div class="group">
+    <span class="group-title">导出 / 分享</span>
+    <button id="btnExportPNG">导出 PNG</button>
+    <button id="btnShareURL">分享链接</button>
+    <button id="btnExportJSON">导出 JSON</button>
+    <button id="btnImportJSON">导入 JSON</button>
+    <input type="file" id="jsonFileInput" accept="application/json,.json" hidden>
+  </div>
+</section>
+
+<div id="mainArea">
+  <div id="tierColumn">
+    <main id="tierBoard"></main>
+    <button id="btnAddRow">+ 添加层级</button>
+  </div>
+  <section id="trayPanel">
+    <div id="trayHeader">
+      <h2>未分级</h2>
+      <input id="traySearch" type="text" placeholder="搜索标题（支持中/日/英）">
+      <span id="trayCount"></span>
+    </div>
+    <div id="trayCards"></div>
+  </section>
+</div>
+
+<footer>
+  <a href="https://github.com/WenHe233/bangumi-tierlist" target="_blank" rel="noreferrer">GitHub</a>
+  · <a href="https://bangumi-calendar.wen-he.icu/" target="_blank" rel="noreferrer">新番时间表</a>
+  · 数据来源：<a href="https://github.com/bangumi-data/bangumi-data" target="_blank" rel="noreferrer">bangumi-data</a>
+  · 封面：<a href="https://lain.bgm.tv" target="_blank" rel="noreferrer">bgm.tv</a>（经 weserv.nl 代理）
+  · 拖拽：SortableJS · 截图：html2canvas
+</footer>
+</div>
+
+<div id="dropOverlay" hidden>松开鼠标以上传图片</div>
+<div id="modalOverlay" hidden><div id="modalBox"></div></div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+
+/* ============================== 常量 ============================== */
+const DATA_URL = "https://unpkg.com/bangumi-data@0.3/dist/data.json";
+const SUBJECT_API = id => `https://api.bgm.tv/v0/subjects/${id}`;
+const PROXY = raw => raw ? ("https://images.weserv.nl/?url=" + raw.replace(/^https?:\/\//, "")) : null;
+const FALLBACK_COVER = "data:image/svg+xml;utf8," + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="84" height="118" viewBox="0 0 84 118"><rect width="100%" height="100%" fill="#2b2f38"/><text x="50%" y="50%" fill="#9aa0a8" font-size="10" text-anchor="middle" dy=".3em">载入中</text></svg>'
+);
+const COVER_CACHE_KEY = "tier_maker_cover_cache";
+const COVER_CONCURRENCY = 6;
+const SEASON_TOLERANCE = 10; // 天，与参考 HTML 一致：边界番剧在相邻 cour 也可见
+const DEFAULT_TIERS = [
+  {label:"S", color:"#e74c3c"},
+  {label:"A", color:"#e67e22"},
+  {label:"B", color:"#f1c40f"},
+  {label:"C", color:"#2ecc71"},
+  {label:"D", color:"#3498db"},
+  {label:"F", color:"#9b59b6"},
+];
+const LS_SETTINGS = "tier_maker_settings";
+const LS_CURRENT = "tier_maker_current";
+const LS_SLOTS = "tier_maker_slots";
+const DB_NAME = "tier_maker_uploads";
+const DB_STORE = "uploads";
+const SHARE_VER = 1;
+const MAX_EDGE = 800;
+const JPEG_Q = 0.85;
+
+/* ============================== 状态 ============================== */
+const state = {
+  rawItems: [],
+  itemsById: {},          // { 'bgm_xxx': {bangumiItem...}, 'upl_xxx': {id,title,blobUrl} }
+  yearSeasonMap: {},      // { year: Set<season 1..4> }
+  currentYear: null,
+  currentSeason: null,    // 0=整年, 1/2/3/4
+  typeFilter: {tv:true, web:true, movie:false, ova:false},
+  tierRows: [],           // [{id, label, color, itemIds:[]}]
+  trayIds: [],
+  lang: "zh-Hans",
+  cardMode: "cover-title",// or "cover-only"
+  activeSlot: "",
+  pendingShareSpec: null, // 解析自 URL 但尚未应用
+  uploadsDB: null,
+  openccConverter: null,
+  bootDone: false,
+};
+
+/* ============================== 工具 ============================== */
+const $ = sel => document.querySelector(sel);
+const $$ = sel => Array.from(document.querySelectorAll(sel));
+const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
+
+function toast(msg, ms=2200){
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._h); toast._h = setTimeout(()=>t.classList.remove("show"), ms);
+}
+function setLoading(pct){
+  const bar = $("#loadingBar");
+  if (pct >= 100){ bar.style.width="100%"; setTimeout(()=>bar.style.width="0", 300); }
+  else bar.style.width = Math.max(2, pct) + "%";
+}
+function luminance(hex){
+  const c = hex.replace("#","");
+  const r = parseInt(c.slice(0,2),16)/255, g = parseInt(c.slice(2,4),16)/255, b = parseInt(c.slice(4,6),16)/255;
+  return 0.2126*r + 0.7152*g + 0.0722*b;
+}
+function textColorOn(bg){ return luminance(bg) > 0.55 ? "#000" : "#fff"; }
+
+/* ============================== 封面解析（带缓存与并发控制） ============================== */
+const coverCache = {};      // { bangumiId: rawUrl | null }
+const coverWaiters = {};    // { bangumiId: [resolve, ...] }
+const coverQueue = [];
+let coverInFlight = 0;
+
+function loadCoverCache(){
+  try{
+    const j = JSON.parse(sessionStorage.getItem(COVER_CACHE_KEY) || "{}");
+    Object.assign(coverCache, j);
+  }catch(_){}
+}
+function saveCoverCache(){
+  try{ sessionStorage.setItem(COVER_CACHE_KEY, JSON.stringify(coverCache)); }catch(_){}
+}
+function resolveCoverUrl(bangumiId){
+  return new Promise(resolve => {
+    if (bangumiId in coverCache){ resolve(coverCache[bangumiId]); return; }
+    if (coverWaiters[bangumiId]){ coverWaiters[bangumiId].push(resolve); return; }
+    coverWaiters[bangumiId] = [resolve];
+    coverQueue.push(bangumiId);
+    pumpCoverQueue();
+  });
+}
+function pumpCoverQueue(){
+  while (coverInFlight < COVER_CONCURRENCY && coverQueue.length){
+    const id = coverQueue.shift();
+    coverInFlight++;
+    fetch(SUBJECT_API(id), { headers: { "Accept":"application/json" } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        let url = null;
+        if (d && d.images) url = d.images.common || d.images.large || d.images.medium || d.images.small || null;
+        coverCache[id] = url;
+        // 节流保存（避免每张图都写一次）
+        clearTimeout(saveCoverCache._h);
+        saveCoverCache._h = setTimeout(saveCoverCache, 500);
+        (coverWaiters[id] || []).forEach(fn => fn(url));
+        delete coverWaiters[id];
+      })
+      .catch(()=>{
+        coverCache[id] = null;
+        (coverWaiters[id] || []).forEach(fn => fn(null));
+        delete coverWaiters[id];
+      })
+      .finally(()=>{ coverInFlight--; pumpCoverQueue(); });
+  }
+}
+function attachCover(imgEl, bangumiId){
+  resolveCoverUrl(bangumiId).then(raw => {
+    if (!raw){ imgEl.src = FALLBACK_COVER; return; }
+    imgEl.src = PROXY(raw);
+  });
+}
+
+/* ============================== 数据层 ============================== */
+async function fetchBangumiData(){
+  // sessionStorage 缓存避免每次刷新都拉
+  try{
+    const cached = sessionStorage.getItem("bangumi_data_cache");
+    if (cached){
+      const j = JSON.parse(cached);
+      if (j && j.items) return j.items;
+    }
+  }catch(_){}
+  setLoading(15);
+  const res = await fetch(DATA_URL);
+  setLoading(60);
+  const j = await res.json();
+  try{ sessionStorage.setItem("bangumi_data_cache", JSON.stringify(j)); }catch(_){}
+  setLoading(80);
+  return j.items;
+}
+
+function deriveSeason(item){
+  if (!item || !item.begin) return null;
+  const m = /^(\d{4})-(\d{2})/.exec(item.begin);
+  if (!m) return null;
+  return { year: parseInt(m[1],10), season: Math.floor((parseInt(m[2],10)-1)/3)+1 };
+}
+function extractBangumiId(item){
+  if (!item || !item.sites) return null;
+  const s = item.sites.find(x => x.site === "bangumi");
+  return s ? s.id : null;
+}
+function ensureItemLoaded(id){
+  if (!id || state.itemsById[id]) return;
+  if (id.startsWith("bgm_")){
+    const bgmId = id.slice(4);
+    const it = state.rawItems.find(x => extractBangumiId(x) === bgmId);
+    if (it) state.itemsById[id] = it;
+  }
+}
+function hydrateAllRefs(){
+  for (const row of state.tierRows){
+    for (const id of row.itemIds) ensureItemLoaded(id);
+  }
+  for (const id of state.trayIds) ensureItemLoaded(id);
+}
+function buildYearSeasonIndex(items){
+  const map = {};
+  for (const it of items){
+    if (it.type !== "tv" && it.type !== "web") continue; // 仅基于 tv+web 构建可选年份
+    const ys = deriveSeason(it);
+    if (!ys) continue;
+    if (!map[ys.year]) map[ys.year] = new Set();
+    map[ys.year].add(ys.season);
+  }
+  return map;
+}
+function filterItems(items, year, season, typeFilter){
+  const types = Object.keys(typeFilter).filter(k => typeFilter[k]);
+  const dayMs = 24 * 3600 * 1000;
+  let filterStart, filterEnd;
+  if (season === 0){
+    // 整年：1月1日 - 10d 到 12月31日 + 10d
+    filterStart = new Date(year, 0, 1).getTime() - SEASON_TOLERANCE * dayMs;
+    filterEnd   = new Date(year, 11, 31).getTime() + SEASON_TOLERANCE * dayMs;
+  } else {
+    const startMonth = (season - 1) * 3;
+    const qStart = new Date(year, startMonth, 1);
+    const qEnd   = new Date(year, startMonth + 3, 0); // 下 cour 第 0 日 = 本 cour 末日
+    filterStart = qStart.getTime() - SEASON_TOLERANCE * dayMs;
+    filterEnd   = qEnd.getTime()   + SEASON_TOLERANCE * dayMs;
+  }
+  return items.filter(it => {
+    if (!types.includes(it.type)) return false;
+    if (!it.begin) return false;
+    const m = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?/.exec(it.begin);
+    if (!m) return false;
+    const y = parseInt(m[1], 10);
+    const mo = m[2] ? parseInt(m[2], 10) : 1;
+    const d = m[3] ? parseInt(m[3], 10) : 1;
+    const t = new Date(y, mo - 1, d).getTime();
+    if (t < filterStart || t > filterEnd) return false;
+    if (!extractBangumiId(it)) return false;
+    return true;
+  });
+}
+
+/* ============================== 标题 / i18n ============================== */
+function getTitle(item, lang){
+  lang = lang || state.lang;
+  if (lang === "ja") return item.title;
+  const tt = item.titleTranslate || {};
+  if (tt[lang] && tt[lang].length) return tt[lang][0];
+  if (lang === "zh-Hant" && tt["zh-Hans"] && tt["zh-Hans"].length){
+    const cn = tt["zh-Hans"][0];
+    if (window.OpenCC){
+      if (!state.openccConverter) state.openccConverter = OpenCC.Converter({from:"cn",to:"t"});
+      return state.openccConverter(cn);
+    }
+    return cn;
+  }
+  if (lang === "en"){
+    if (tt["en"] && tt["en"].length) return tt["en"][0];
+    return item.title;
+  }
+  if (tt["zh-Hans"] && tt["zh-Hans"].length) return tt["zh-Hans"][0];
+  if (tt["en"] && tt["en"].length) return tt["en"][0];
+  return item.title;
+}
+function normalizeForSearch(s){
+  return (s||"").toString().toLowerCase().normalize("NFKD");
+}
+function itemSearchHaystack(item){
+  if (item._kind === "upl") return normalizeForSearch(item.title);
+  const tt = item.titleTranslate || {};
+  const parts = [item.title];
+  ["zh-Hans","zh-Hant","en","ja"].forEach(k=>{ if (tt[k]) parts.push(...tt[k]); });
+  return normalizeForSearch(parts.join(" "));
+}
+
+/* ============================== 持久化（localStorage） ============================== */
+function loadSettings(){
+  try{
+    const s = JSON.parse(localStorage.getItem(LS_SETTINGS)) || {};
+    if (s.lang) state.lang = s.lang;
+    if (s.cardMode) state.cardMode = s.cardMode;
+    if (s.typeFilter) state.typeFilter = Object.assign({}, state.typeFilter, s.typeFilter);
+    if (s.currentYear) state.currentYear = s.currentYear;
+    if (s.currentSeason !== undefined) state.currentSeason = s.currentSeason;
+    if (s.activeSlot) state.activeSlot = s.activeSlot;
+  }catch(_){}
+}
+function saveSettings(){
+  try{
+    localStorage.setItem(LS_SETTINGS, JSON.stringify({
+      lang: state.lang, cardMode: state.cardMode, typeFilter: state.typeFilter,
+      currentYear: state.currentYear, currentSeason: state.currentSeason,
+      activeSlot: state.activeSlot,
+    }));
+  }catch(e){ toast("设置保存失败：" + e.message); }
+}
+function saveCurrent(){
+  try{
+    localStorage.setItem(LS_CURRENT, JSON.stringify({
+      year: state.currentYear, season: state.currentSeason,
+      typeFilter: state.typeFilter,
+      tierRows: state.tierRows, trayIds: state.trayIds,
+    }));
+  }catch(e){ toast("自动保存失败：" + e.message); }
+}
+function loadCurrent(){
+  try{
+    return JSON.parse(localStorage.getItem(LS_CURRENT));
+  }catch(_){ return null; }
+}
+function listSlots(){
+  try{ return JSON.parse(localStorage.getItem(LS_SLOTS)) || {}; }catch(_){ return {}; }
+}
+function saveSlot(name, data){
+  const slots = listSlots(); slots[name] = data;
+  try{ localStorage.setItem(LS_SLOTS, JSON.stringify(slots)); }
+  catch(e){ toast("存档失败（可能配额已满）：" + e.message); return false; }
+  return true;
+}
+function deleteSlot(name){
+  const slots = listSlots(); delete slots[name];
+  localStorage.setItem(LS_SLOTS, JSON.stringify(slots));
+}
+
+/* ============================== IndexedDB (uploads) ============================== */
+function openUploadsDB(){
+  return new Promise((resolve, reject)=>{
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(DB_STORE))
+        db.createObjectStore(DB_STORE, { keyPath: "id" });
+    };
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = e => reject(e.target.error);
+  });
+}
+function idbPut(rec){
+  return new Promise((resolve, reject)=>{
+    const tx = state.uploadsDB.transaction(DB_STORE, "readwrite");
+    tx.objectStore(DB_STORE).put(rec);
+    tx.oncomplete = () => resolve();
+    tx.onerror = e => reject(e.target.error);
+  });
+}
+function idbDelete(id){
+  return new Promise((resolve, reject)=>{
+    const tx = state.uploadsDB.transaction(DB_STORE, "readwrite");
+    tx.objectStore(DB_STORE).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = e => reject(e.target.error);
+  });
+}
+function idbAll(){
+  return new Promise((resolve, reject)=>{
+    const tx = state.uploadsDB.transaction(DB_STORE, "readonly");
+    const req = tx.objectStore(DB_STORE).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = e => reject(e.target.error);
+  });
+}
+async function listUploadedImages(){
+  if (!state.uploadsDB) return;
+  const all = await idbAll();
+  all.sort((a,b)=>a.addedAt - b.addedAt);
+  for (const rec of all){
+    const blobUrl = URL.createObjectURL(rec.blob);
+    state.itemsById[rec.id] = {
+      _kind:"upl", id: rec.id, title: rec.title, blobUrl, addedAt: rec.addedAt,
+    };
+  }
+}
+
+function compressImage(blob){
+  return new Promise((resolve, reject)=>{
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      try{
+        const w0 = img.naturalWidth, h0 = img.naturalHeight;
+        const m = Math.max(w0, h0);
+        const scale = m > MAX_EDGE ? MAX_EDGE / m : 1;
+        const w = Math.round(w0 * scale), h = Math.round(h0 * scale);
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob(b => {
+          URL.revokeObjectURL(url);
+          if (!b) return reject(new Error("压缩失败"));
+          resolve(b);
+        }, "image/jpeg", JPEG_Q);
+      }catch(e){ URL.revokeObjectURL(url); reject(e); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("无法解码图片（可能跨域或损坏）")); };
+    img.crossOrigin = "anonymous";
+    img.src = url;
+  });
+}
+
+async function addUploadedImage(rawBlob, srcMeta){
+  if (!state.uploadsDB){ toast("IndexedDB 不可用"); return; }
+  let blob;
+  try{ blob = await compressImage(rawBlob); }
+  catch(e){ toast("压缩失败：" + e.message); return; }
+  const id = "upl_" + uid();
+  const title = (srcMeta && srcMeta.title) ? srcMeta.title : ("上传 " + new Date().toLocaleTimeString());
+  const rec = { id, title, blob, addedAt: Date.now() };
+  try{ await idbPut(rec); }
+  catch(e){ toast("入库失败：" + e.message); return; }
+  state.itemsById[id] = { _kind:"upl", id, title, blobUrl: URL.createObjectURL(blob), addedAt: rec.addedAt };
+  state.trayIds.push(id);
+  renderTray(); saveCurrent();
+}
+
+async function removeUploadedImage(id){
+  if (!state.itemsById[id] || state.itemsById[id]._kind !== "upl") return;
+  if (!confirm("删除将清除本图，无法恢复。继续？")) return;
+  try{ await idbDelete(id); }catch(e){ toast("删除失败：" + e.message); return; }
+  // 从所有位置移除
+  const idx = state.trayIds.indexOf(id);
+  if (idx >= 0) state.trayIds.splice(idx, 1);
+  for (const row of state.tierRows){
+    const j = row.itemIds.indexOf(id);
+    if (j >= 0) row.itemIds.splice(j, 1);
+  }
+  try{ URL.revokeObjectURL(state.itemsById[id].blobUrl); }catch(_){}
+  delete state.itemsById[id];
+  renderAll(); saveCurrent();
+}
+
+async function ingestFiles(fileList){
+  const files = Array.from(fileList || []).filter(f => /^image\//.test(f.type));
+  if (!files.length){ toast("没有图片文件"); return; }
+  for (const f of files){
+    const title = (f.name || "").replace(/\.[^.]+$/, "").slice(0, 40) || "上传";
+    await addUploadedImage(f, { title });
+  }
+  toast(`已上传 ${files.length} 张`);
+}
+async function ingestUrl(urlStr){
+  urlStr = (urlStr || "").trim();
+  if (!urlStr) return;
+  // data: / blob: 直接 fetch；http(s) 走 weserv.nl
+  let fetchUrl;
+  if (/^(data|blob):/.test(urlStr)) fetchUrl = urlStr;
+  else if (/^https?:\/\//.test(urlStr))
+    fetchUrl = "https://images.weserv.nl/?url=" + encodeURIComponent(urlStr.replace(/^https?:\/\//, ""));
+  else { toast("无效的 URL"); return; }
+  try{
+    const res = await fetch(fetchUrl);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const blob = await res.blob();
+    const title = (urlStr.split("/").pop() || "URL 图片").split("?")[0].replace(/\.[^.]+$/,"").slice(0,40) || "URL 图片";
+    await addUploadedImage(blob, { title });
+    toast("已上传 URL 图片");
+  }catch(e){ toast("URL 拉取失败：" + e.message); }
+}
+async function ingestClipboard(e){
+  if (!e.clipboardData) return;
+  const items = Array.from(e.clipboardData.items || []);
+  const imageItems = items.filter(it => /^image\//.test(it.type));
+  if (imageItems.length){
+    e.preventDefault();
+    for (const it of imageItems){
+      const f = it.getAsFile();
+      if (f) await addUploadedImage(f, { title: "粘贴图片" });
+    }
+    toast(`已粘贴 ${imageItems.length} 张`);
+    return;
+  }
+  // 文本：可能是 URL
+  const text = e.clipboardData.getData("text/plain");
+  if (text && /^https?:\/\/\S+\.(png|jpe?g|webp|gif|bmp|avif)(\?\S*)?$/i.test(text.trim())){
+    e.preventDefault();
+    await ingestUrl(text.trim());
+  }
+}
+
+/* ============================== 渲染 ============================== */
+function renderAll(){
+  renderTierBoard();
+  renderTray();
+  updateCardModeClass();
+}
+function updateCardModeClass(){
+  document.body.classList.toggle("show-titles", state.cardMode === "cover-title");
+  $("#cardModeToggle").textContent = state.cardMode === "cover-title" ? "封面+标题" : "纯封面";
+}
+function renderTierBoard(){
+  const board = $("#tierBoard");
+  board.innerHTML = "";
+  for (const row of state.tierRows){
+    board.appendChild(renderRow(row));
+  }
+  initSortables();
+}
+function renderRow(row){
+  const el = document.createElement("div");
+  el.className = "tier-row";
+  el.dataset.rowId = row.id;
+  const label = document.createElement("div");
+  label.className = "tier-label";
+  label.style.background = row.color;
+  label.style.color = textColorOn(row.color);
+  label.innerHTML = `
+    <input class="tier-label-text" maxlength="8" value="${escapeAttr(row.label)}">
+    <div class="tier-row-tools">
+      <input type="color" value="${row.color}" title="颜色">
+      <button data-act="up" title="上移">▲</button>
+      <button data-act="down" title="下移">▼</button>
+      <button data-act="del" title="删除此行（卡片回流到托盘）">×</button>
+    </div>
+  `;
+  label.querySelector(".tier-label-text").addEventListener("input", e => {
+    row.label = e.target.value;
+    saveCurrent();
+  });
+  label.querySelector("input[type=color]").addEventListener("input", e => {
+    row.color = e.target.value;
+    label.style.background = row.color;
+    label.style.color = textColorOn(row.color);
+    saveCurrent();
+  });
+  label.querySelectorAll("button[data-act]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const act = btn.dataset.act;
+      if (act === "up") moveRow(row.id, -1);
+      else if (act === "down") moveRow(row.id, 1);
+      else if (act === "del") deleteRow(row.id);
+    });
+  });
+  const cards = document.createElement("div");
+  cards.className = "tier-cards";
+  cards.dataset.rowId = row.id;
+  for (const id of row.itemIds){
+    cards.appendChild(renderCard(id));
+  }
+  el.appendChild(label);
+  el.appendChild(cards);
+  return el;
+}
+function renderTray(){
+  // 实际渲染逻辑全部交给 applyTraySearch（它能区分无搜索 / 全局搜索两种模式）
+  applyTraySearch();
+}
+function renderCard(id){
+  const item = state.itemsById[id];
+  const card = document.createElement("div");
+  card.className = "card";
+  card.dataset.itemId = id;
+  if (!item){
+    card.classList.add(id.startsWith("phantom_") ? "is-phantom" : "is-missing");
+    card.dataset.kind = id.startsWith("phantom_") ? "phantom" : "missing";
+    card.title = id.startsWith("phantom_") ? "[本地图]（原作者本地图片，仅占位）" : "已下架/未在当前数据集";
+    return card;
+  }
+  if (item._kind === "upl"){
+    card.classList.add("is-upload");
+    card.dataset.kind = "upl";
+    card.title = item.title || "上传";
+    card.innerHTML = `
+      <img class="card-cover" src="${item.blobUrl}" alt="">
+      <span class="card-title">${escapeHtml(item.title || "")}</span>
+      <span class="card-badge">U</span>
+      <button class="card-del" title="删除此上传">×</button>
+    `;
+    card.querySelector(".card-del").addEventListener("click", e => {
+      e.stopPropagation();
+      removeUploadedImage(id);
+    });
+  } else {
+    card.dataset.kind = "bgm";
+    const title = getTitle(item, state.lang);
+    card.title = title;
+    const bgmId = extractBangumiId(item);
+    card.innerHTML = `
+      <img class="card-cover" src="${FALLBACK_COVER}" crossorigin="anonymous"
+           referrerpolicy="no-referrer" alt=""
+           onerror="this.onerror=null;this.src='${FALLBACK_COVER}';">
+      <span class="card-title">${escapeHtml(title)}</span>
+    `;
+    attachCover(card.querySelector(".card-cover"), bgmId);
+  }
+  return card;
+}
+function escapeHtml(s){
+  return (s||"").toString().replace(/[&<>"']/g, c =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+}
+function escapeAttr(s){ return escapeHtml(s); }
+
+const SEARCH_CAP = 300;
+function applyTraySearch(){
+  const tray = $("#trayCards");
+  const qRaw = $("#traySearch").value;
+  const q = normalizeForSearch(qRaw);
+  tray.innerHTML = "";
+  if (!q){
+    // 自然托盘：当前 cour 过滤后的列表
+    for (const id of state.trayIds) tray.appendChild(renderCard(id));
+    $("#trayCount").textContent = `${state.trayIds.length} 张`;
+  } else {
+    // 全局搜索：扫描整个 rawItems（尊重类型过滤）+ 所有上传，排除已放进 tier 的
+    const placed = new Set();
+    for (const row of state.tierRows) for (const id of row.itemIds) placed.add(id);
+    const types = Object.keys(state.typeFilter).filter(k => state.typeFilter[k]);
+    const seen = new Set();
+    const results = [];
+    for (const it of state.rawItems){
+      if (!types.includes(it.type)) continue;
+      const bgmId = extractBangumiId(it);
+      if (!bgmId) continue;
+      const id = "bgm_" + bgmId;
+      if (placed.has(id) || seen.has(id)) continue;
+      if (itemSearchHaystack(it).includes(q)){
+        if (!state.itemsById[id]) state.itemsById[id] = it;
+        results.push(id); seen.add(id);
+        if (results.length >= SEARCH_CAP * 2) break; // 早停，cap*2 留余量给上传去重
+      }
+    }
+    for (const id of Object.keys(state.itemsById)){
+      if (!id.startsWith("upl_")) continue;
+      if (placed.has(id) || seen.has(id)) continue;
+      const item = state.itemsById[id];
+      if (itemSearchHaystack(item).includes(q)){
+        results.push(id); seen.add(id);
+      }
+    }
+    const display = results.slice(0, SEARCH_CAP);
+    for (const id of display) tray.appendChild(renderCard(id));
+    $("#trayCount").textContent = results.length > SEARCH_CAP
+      ? `${SEARCH_CAP} / ${results.length}（全局搜索，已截断）`
+      : `${results.length} 张（全局搜索）`;
+  }
+  initSortables();
+}
+
+/* ============================== 选择器 / 载入 ============================== */
+function refreshSelectors(){
+  const years = Object.keys(state.yearSeasonMap).map(Number).sort((a,b)=>b-a);
+  const ysel = $("#yearSelect");
+  ysel.innerHTML = "";
+  for (const y of years){
+    const opt = document.createElement("option");
+    opt.value = String(y); opt.textContent = y + " 年";
+    ysel.appendChild(opt);
+  }
+  // 选择持久化的年份；如果不在列表里，回退到最大值
+  let y = state.currentYear;
+  if (!y || !years.includes(y)) y = years[0] || new Date().getFullYear();
+  ysel.value = String(y);
+  state.currentYear = y;
+  updateSeasonAvailability();
+  // 类型筛选 UI 同步
+  $$("#typeFilter input[type=checkbox]").forEach(cb => { cb.checked = !!state.typeFilter[cb.value]; });
+  $("#langSelect").value = state.lang;
+}
+function updateSeasonAvailability(){
+  const set = state.yearSeasonMap[state.currentYear] || new Set();
+  const ssel = $("#seasonSelect");
+  Array.from(ssel.options).forEach(opt => {
+    const v = parseInt(opt.value, 10);
+    if (v === 0) opt.disabled = set.size === 0;
+    else opt.disabled = !set.has(v);
+  });
+  // 选定 currentSeason，若不可用则回退
+  let s = state.currentSeason;
+  if (s === null || s === undefined) s = 0;
+  if (s !== 0 && !set.has(s)){
+    // 落到第一个可用季度
+    for (let i=1;i<=4;i++) if (set.has(i)){ s = i; break; }
+  }
+  ssel.value = String(s);
+  state.currentSeason = s;
+}
+
+function readTypeFilterFromUI(){
+  const tf = {tv:false, web:false, movie:false, ova:false};
+  $$("#typeFilter input[type=checkbox]").forEach(cb => { tf[cb.value] = cb.checked; });
+  return tf;
+}
+
+function loadCurrentSelection({keepUploads=true, keepTierStructure=true} = {}){
+  state.currentYear = parseInt($("#yearSelect").value, 10);
+  state.currentSeason = parseInt($("#seasonSelect").value, 10);
+  state.typeFilter = readTypeFilterFromUI();
+
+  const filtered = filterItems(state.rawItems, state.currentYear, state.currentSeason, state.typeFilter);
+  const newBgmIds = new Set();
+  for (const it of filtered){
+    const id = "bgm_" + extractBangumiId(it);
+    state.itemsById[id] = it;
+    newBgmIds.add(id);
+  }
+  // 标记 tier 行里已放置的 bangumi 项，切换 cour 时也要保留（跨 cour 排名）
+  const preserveBgm = new Set();
+  if (keepTierStructure){
+    for (const row of state.tierRows){
+      for (const id of row.itemIds){
+        if (id.startsWith("bgm_")) preserveBgm.add(id);
+      }
+    }
+  }
+  // 清理 itemsById 里旧 bangumi 项（不在新筛选范围 + 不在 tier 行里）
+  for (const k of Object.keys(state.itemsById)){
+    if (k.startsWith("bgm_") && !newBgmIds.has(k) && !preserveBgm.has(k)){
+      delete state.itemsById[k];
+    }
+  }
+  // 重建 tier rows
+  if (!keepTierStructure || !state.tierRows.length){
+    state.tierRows = DEFAULT_TIERS.map((t,i) => ({ id: "r_"+uid(), label:t.label, color:t.color, itemIds:[] }));
+  } else {
+    // 保留所有还存在的 item（上传 + 当前 cour 的 bangumi + 跨 cour 已放置的 bangumi）
+    for (const row of state.tierRows){
+      row.itemIds = row.itemIds.filter(id => state.itemsById[id]);
+    }
+  }
+  // 重建 tray：上传项（按 addedAt）+ 新 bangumi 项；扣掉已在 tier 里的
+  const placed = new Set();
+  for (const row of state.tierRows) for (const id of row.itemIds) placed.add(id);
+  const uplIds = Object.keys(state.itemsById)
+    .filter(k => state.itemsById[k]._kind === "upl" && !placed.has(k))
+    .sort((a,b)=> state.itemsById[a].addedAt - state.itemsById[b].addedAt);
+  state.trayIds = [...uplIds, ...Array.from(newBgmIds).filter(id => !placed.has(id))];
+  renderAll(); saveSettings(); saveCurrent();
+}
+
+/* ============================== Tier 行操作 ============================== */
+function addRow(){
+  state.tierRows.push({ id:"r_"+uid(), label:"新", color:"#7f8c8d", itemIds:[] });
+  renderTierBoard(); saveCurrent();
+}
+function deleteRow(id){
+  const idx = state.tierRows.findIndex(r => r.id === id);
+  if (idx < 0) return;
+  if (!confirm(`删除「${state.tierRows[idx].label}」行？里面的卡片会回到托盘。`)) return;
+  const row = state.tierRows[idx];
+  state.trayIds.push(...row.itemIds);
+  state.tierRows.splice(idx, 1);
+  renderAll(); saveCurrent();
+}
+function moveRow(id, dir){
+  const idx = state.tierRows.findIndex(r => r.id === id);
+  if (idx < 0) return;
+  const nIdx = idx + dir;
+  if (nIdx < 0 || nIdx >= state.tierRows.length) return;
+  const [r] = state.tierRows.splice(idx, 1);
+  state.tierRows.splice(nIdx, 0, r);
+  renderTierBoard(); saveCurrent();
+}
+
+/* ============================== DnD (SortableJS) ============================== */
+function initSortables(){
+  if (typeof Sortable === "undefined") return;
+  const opts = {
+    group:{ name:"tiermaker", pull:true, put:true },
+    animation:120, delay:150, delayOnTouchOnly:true, fallbackOnBody:true,
+    onEnd: (evt) => syncStateFromDOM(evt),
+  };
+  $$(".tier-cards").forEach(el => {
+    if (el._sortable) try{ el._sortable.destroy(); }catch(_){}
+    el._sortable = Sortable.create(el, opts);
+  });
+  const tray = $("#trayCards");
+  if (tray._sortable) try{ tray._sortable.destroy(); }catch(_){}
+  tray._sortable = Sortable.create(tray, opts);
+}
+function syncStateFromDOM(evt){
+  // tier 行始终从 DOM 读
+  for (const row of state.tierRows){
+    const cont = document.querySelector(`.tier-cards[data-row-id="${row.id}"]`);
+    if (!cont) continue;
+    row.itemIds = Array.from(cont.children).map(c => c.dataset.itemId);
+  }
+  const trayEl = $("#trayCards");
+  const q = ($("#traySearch").value || "").trim();
+  if (!q){
+    // 无搜索：托盘 DOM 即真实状态
+    state.trayIds = Array.from(trayEl.children).map(c => c.dataset.itemId);
+  } else {
+    // 搜索激活：仅按拖拽事件局部更新 trayIds，搜索结果卡不应被误算入托盘
+    if (evt && evt.item){
+      const movedId = evt.item.dataset.itemId;
+      const fromTray = evt.from === trayEl;
+      const toTray = evt.to === trayEl;
+      if (toTray && !fromTray){
+        // 从 tier 行拖入托盘 → 持久化到 trayIds（搜索清空后仍可见）
+        if (!state.trayIds.includes(movedId)) state.trayIds.push(movedId);
+      } else if (fromTray && !toTray){
+        // 从托盘拖出到 tier 行 → 若曾在 trayIds 中则移除
+        const idx = state.trayIds.indexOf(movedId);
+        if (idx >= 0) state.trayIds.splice(idx, 1);
+      }
+    }
+    // 重新渲染托盘，按搜索结果显示（被刚拖入的卡若不匹配 q 会暂时隐去，但已在 trayIds 中保留）
+    applyTraySearch();
+  }
+  saveCurrent();
+}
+
+/* ============================== 导出 / 分享 ============================== */
+async function exportPNG(){
+  if (typeof html2canvas === "undefined"){ toast("html2canvas 未加载"); return; }
+  toast("正在生成图片…");
+  // 临时确保 tier 行下面有 tray 也截到？只截 tier board。
+  try{
+    const canvas = await html2canvas($("#tierBoard"), {
+      backgroundColor:"#1b1f27", useCORS:true, allowTaint:false, scale:2, logging:false,
+    });
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `tier_${state.currentYear || "all"}_${state.currentSeason || "x"}_${Date.now()}.png`;
+      a.click();
+      setTimeout(()=>URL.revokeObjectURL(url), 1000);
+      toast("已导出 PNG");
+    }, "image/png");
+  }catch(e){ toast("导出失败：" + e.message); }
+}
+
+function buildShareURL(){
+  const parts = [];
+  parts.push("s=" + SHARE_VER);
+  parts.push("y=" + (state.currentYear || ""));
+  parts.push("q=" + (state.currentSeason || 0));
+  let tf = ""; if (state.typeFilter.tv) tf+="t"; if (state.typeFilter.web) tf+="w";
+  if (state.typeFilter.movie) tf+="m"; if (state.typeFilter.ova) tf+="o";
+  parts.push("t=" + tf);
+  const rowParts = state.tierRows.map(row => {
+    const ids = row.itemIds.map(id => {
+      if (id.startsWith("bgm_")) return id.slice(4);
+      if (id.startsWith("upl_")) return "*";
+      return "";
+    }).filter(Boolean).join(".");
+    return encodeURIComponent(row.label) + ":" + row.color.replace("#","") + "~" + ids;
+  }).join("|");
+  parts.push("r=" + rowParts);
+  // 未排名上传隐去；未排名 bangumi 不带（重建时自动从季度数据填）
+  const url = location.origin + location.pathname + "?" + parts.join("&");
+  return url;
+}
+function parseShareURL(){
+  const q = new URLSearchParams(location.search);
+  if (!q.get("s")) return null;
+  const spec = {
+    ver: parseInt(q.get("s"), 10),
+    year: parseInt(q.get("y"), 10) || null,
+    season: parseInt(q.get("q"), 10) || 0,
+    typeFilter: { tv:false, web:false, movie:false, ova:false },
+    rows: [],
+  };
+  const tf = q.get("t") || "";
+  if (tf.includes("t")) spec.typeFilter.tv = true;
+  if (tf.includes("w")) spec.typeFilter.web = true;
+  if (tf.includes("m")) spec.typeFilter.movie = true;
+  if (tf.includes("o")) spec.typeFilter.ova = true;
+  const rRaw = q.get("r") || "";
+  for (const part of rRaw.split("|")){
+    if (!part) continue;
+    const colon = part.indexOf(":");
+    const tilde = part.indexOf("~");
+    if (colon < 0 || tilde < 0) continue;
+    const label = decodeURIComponent(part.slice(0, colon));
+    const color = "#" + part.slice(colon+1, tilde);
+    const ids = part.slice(tilde+1).split(".").filter(Boolean);
+    spec.rows.push({ label, color, ids });
+  }
+  return spec;
+}
+function applyShareSpec(spec){
+  // 设置 year/season/type
+  state.currentYear = spec.year;
+  state.currentSeason = spec.season;
+  state.typeFilter = spec.typeFilter;
+  // 载入相应季度（仅 bangumi 项进 itemsById）
+  const filtered = filterItems(state.rawItems, spec.year, spec.season, spec.typeFilter);
+  for (const it of filtered){
+    state.itemsById["bgm_" + extractBangumiId(it)] = it;
+  }
+  // 构建 tierRows，phantom_ID 占位
+  let pIdx = 0;
+  state.tierRows = spec.rows.map(r => {
+    const ids = r.ids.map(tok => {
+      if (tok === "*") return "phantom_" + (pIdx++);
+      return "bgm_" + tok;
+    });
+    return { id:"r_"+uid(), label:r.label, color:r.color, itemIds: ids };
+  });
+  if (!state.tierRows.length){
+    state.tierRows = DEFAULT_TIERS.map(t => ({ id:"r_"+uid(), label:t.label, color:t.color, itemIds:[] }));
+  }
+  // tray：所有 bangumi 项 - 已放入 tier 的
+  const placed = new Set();
+  for (const row of state.tierRows) for (const id of row.itemIds) placed.add(id);
+  const newBgmIds = filtered.map(it => "bgm_" + extractBangumiId(it));
+  const uplIds = Object.keys(state.itemsById).filter(k => state.itemsById[k]._kind === "upl")
+    .sort((a,b)=> state.itemsById[a].addedAt - state.itemsById[b].addedAt);
+  state.trayIds = [...uplIds, ...newBgmIds.filter(id => !placed.has(id))];
+  hydrateAllRefs(); // 补齐 tier 行里的跨 cour 项
+  // 同步 UI
+  refreshSelectors();
+  renderAll(); saveSettings(); saveCurrent();
+  // 清掉 URL ?s=... 避免刷新再次套用旧分享
+  history.replaceState(null, "", location.pathname);
+}
+
+/* ============================== JSON 导入/导出 ============================== */
+async function exportJSON(){
+  // 收集所有用到的上传项（不仅是 state.uploads 全部，而是当前 board 用到的，且额外把库里都带上以备份）
+  const uplIds = Object.keys(state.itemsById).filter(k => k.startsWith("upl_"));
+  const uploads = [];
+  for (const id of uplIds){
+    const item = state.itemsById[id];
+    try{
+      // 读 IndexedDB 拿原 blob
+      const rec = await new Promise((resolve, reject)=>{
+        const tx = state.uploadsDB.transaction(DB_STORE, "readonly");
+        const req = tx.objectStore(DB_STORE).get(id);
+        req.onsuccess = ()=>resolve(req.result);
+        req.onerror = e=>reject(e.target.error);
+      });
+      if (!rec) continue;
+      const base64 = await blobToBase64(rec.blob);
+      uploads.push({ id: rec.id, title: rec.title, addedAt: rec.addedAt, base64 });
+    }catch(e){ console.warn("无法导出上传项", id, e); }
+  }
+  const payload = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    state: {
+      year: state.currentYear, season: state.currentSeason,
+      typeFilter: state.typeFilter,
+      tierRows: state.tierRows,
+      trayIds: state.trayIds,
+      lang: state.lang, cardMode: state.cardMode,
+    },
+    uploads,
+  };
+  const blob = new Blob([JSON.stringify(payload)], { type:"application/json" });
+  const sizeKB = Math.round(blob.size/1024);
+  if (sizeKB > 5000){
+    if (!confirm(`导出的 JSON 约 ${sizeKB} KB（含 ${uploads.length} 张上传图），文件较大。继续？`)) return;
+  } else {
+    toast(`JSON 约 ${sizeKB} KB`);
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `tier_maker_${Date.now()}.json`; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+function blobToBase64(blob){
+  return new Promise((resolve, reject)=>{
+    const r = new FileReader();
+    r.onload = ()=>resolve(r.result); // data:...;base64,XXXX
+    r.onerror = ()=>reject(r.error);
+    r.readAsDataURL(blob);
+  });
+}
+function dataUrlToBlob(dataUrl){
+  const m = /^data:([^;]+);base64,(.*)$/.exec(dataUrl);
+  if (!m) return null;
+  const bin = atob(m[2]);
+  const arr = new Uint8Array(bin.length);
+  for (let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type:m[1] });
+}
+async function importJSON(file){
+  let payload;
+  try{ payload = JSON.parse(await file.text()); }
+  catch(e){ toast("JSON 解析失败"); return; }
+  if (!payload || !payload.state){ toast("无效的存档文件"); return; }
+  // 先把上传写回 IndexedDB / state.itemsById
+  if (Array.isArray(payload.uploads)){
+    for (const u of payload.uploads){
+      const blob = dataUrlToBlob(u.base64);
+      if (!blob) continue;
+      try{
+        await idbPut({ id: u.id, title: u.title, blob, addedAt: u.addedAt || Date.now() });
+        if (state.itemsById[u.id] && state.itemsById[u.id].blobUrl) {
+          try{ URL.revokeObjectURL(state.itemsById[u.id].blobUrl); }catch(_){}
+        }
+        state.itemsById[u.id] = { _kind:"upl", id:u.id, title:u.title, blobUrl: URL.createObjectURL(blob), addedAt: u.addedAt || Date.now() };
+      }catch(e){ console.warn("导入上传失败", u.id, e); }
+    }
+  }
+  // 恢复状态
+  const s = payload.state;
+  state.currentYear = s.year || state.currentYear;
+  state.currentSeason = s.season != null ? s.season : state.currentSeason;
+  state.typeFilter = s.typeFilter || state.typeFilter;
+  state.lang = s.lang || state.lang;
+  state.cardMode = s.cardMode || state.cardMode;
+  // 重建 itemsById 里的 bangumi 项
+  const filtered = filterItems(state.rawItems, state.currentYear, state.currentSeason, state.typeFilter);
+  for (const it of filtered) state.itemsById["bgm_" + extractBangumiId(it)] = it;
+  state.tierRows = (s.tierRows || []).map(r => ({ id:"r_"+uid(), label:r.label, color:r.color, itemIds: r.itemIds.slice() }));
+  state.trayIds = (s.trayIds || []).slice();
+  hydrateAllRefs();
+  refreshSelectors();
+  renderAll(); saveSettings(); saveCurrent();
+  toast("导入成功");
+}
+
+/* ============================== Modal ============================== */
+function showModal(html){
+  const box = $("#modalBox");
+  box.innerHTML = html;
+  $("#modalOverlay").hidden = false;
+}
+function hideModal(){ $("#modalOverlay").hidden = true; }
+
+function promptSaveAs(){
+  showModal(`
+    <h3>另存为</h3>
+    <p class="hint">为本次排名起个名字，将保存到本地浏览器。</p>
+    <input type="text" id="modalInput" placeholder="例如：2026 冬季最爱" maxlength="40">
+    <div class="actions">
+      <button id="modalCancel">取消</button>
+      <button id="modalOk" class="primary">保存</button>
+    </div>
+  `);
+  const input = $("#modalInput"); input.focus();
+  $("#modalCancel").onclick = hideModal;
+  $("#modalOk").onclick = () => {
+    const name = input.value.trim();
+    if (!name) return;
+    if (saveSlotFromState(name)){
+      hideModal();
+      refreshSlotList(name);
+      toast(`已保存到「${name}」`);
+    }
+  };
+  input.addEventListener("keydown", e => { if (e.key === "Enter") $("#modalOk").click(); });
+}
+function showShareURL(url){
+  const sizeKB = (url.length / 1024).toFixed(2);
+  const tooLong = url.length > 2000;
+  showModal(`
+    <h3>分享链接 <span style="color:var(--text-dim);font-size:.7em">${sizeKB} KB</span></h3>
+    ${tooLong ? '<p class="hint" style="color:#f0ad4e">⚠ 链接过长可能被部分客户端截断，建议改用 JSON 导出。</p>' : '<p class="hint">复制下面的链接，别人打开即可看到你这次的排名。本地上传的图会显示为「[本地图]」占位。</p>'}
+    <div class="shareUrlBox" id="shareUrlText">${escapeHtml(url)}</div>
+    <div class="actions">
+      <button id="modalCancel">关闭</button>
+      <button id="modalCopy" class="primary">复制</button>
+    </div>
+  `);
+  $("#modalCancel").onclick = hideModal;
+  $("#modalCopy").onclick = async () => {
+    try{ await navigator.clipboard.writeText(url); toast("已复制"); hideModal(); }
+    catch(e){
+      // fallback
+      const sel = document.createRange(); sel.selectNode($("#shareUrlText"));
+      window.getSelection().removeAllRanges(); window.getSelection().addRange(sel);
+      document.execCommand("copy"); toast("已复制（fallback）"); hideModal();
+    }
+  };
+}
+
+function saveSlotFromState(name){
+  const data = {
+    year: state.currentYear, season: state.currentSeason,
+    typeFilter: state.typeFilter,
+    tierRows: state.tierRows, trayIds: state.trayIds,
+    savedAt: Date.now(),
+  };
+  const ok = saveSlot(name, data);
+  if (ok){ state.activeSlot = name; saveSettings(); }
+  return ok;
+}
+function refreshSlotList(selected){
+  const sel = $("#slotSelect");
+  const slots = listSlots();
+  const names = Object.keys(slots).sort();
+  sel.innerHTML = `<option value="">— 未选择 —</option>` + names.map(n => `<option value="${escapeAttr(n)}">${escapeHtml(n)}</option>`).join("");
+  sel.value = selected || state.activeSlot || "";
+}
+function loadSlotByName(name){
+  const slots = listSlots();
+  const d = slots[name];
+  if (!d){ toast("找不到该存档"); return; }
+  state.currentYear = d.year; state.currentSeason = d.season;
+  state.typeFilter = d.typeFilter || state.typeFilter;
+  // 重建 bangumi 项
+  const filtered = filterItems(state.rawItems, state.currentYear, state.currentSeason, state.typeFilter);
+  for (const it of filtered) state.itemsById["bgm_" + extractBangumiId(it)] = it;
+  state.tierRows = (d.tierRows || []).map(r => ({ id:"r_"+uid(), label:r.label, color:r.color, itemIds: r.itemIds.slice() }));
+  state.trayIds = (d.trayIds || []).slice();
+  state.activeSlot = name;
+  hydrateAllRefs();
+  refreshSelectors();
+  renderAll(); saveSettings(); saveCurrent();
+  toast(`已载入「${name}」`);
+}
+
+/* ============================== 事件绑定 ============================== */
+function bindEvents(){
+  // 全局控制
+  $("#langSelect").addEventListener("change", e => {
+    state.lang = e.target.value; saveSettings(); renderAll();
+  });
+  $("#cardModeToggle").addEventListener("click", () => {
+    state.cardMode = state.cardMode === "cover-title" ? "cover-only" : "cover-title";
+    updateCardModeClass(); saveSettings();
+  });
+  // 载入
+  $("#btnLoad").addEventListener("click", () => loadCurrentSelection({keepUploads:true, keepTierStructure:true}));
+  $("#yearSelect").addEventListener("change", () => {
+    state.currentYear = parseInt($("#yearSelect").value, 10);
+    updateSeasonAvailability();
+  });
+  // 行操作
+  $("#btnAddRow").addEventListener("click", addRow);
+  // 托盘搜索
+  let _q;
+  $("#traySearch").addEventListener("input", () => {
+    clearTimeout(_q); _q = setTimeout(applyTraySearch, 80);
+  });
+  // 类型过滤即时同步（不自动重载，仍需点载入）
+  $$("#typeFilter input[type=checkbox]").forEach(cb => {
+    cb.addEventListener("change", () => { state.typeFilter[cb.value] = cb.checked; saveSettings(); });
+  });
+  // 存档
+  $("#slotSelect").addEventListener("change", e => {
+    const name = e.target.value;
+    if (name) loadSlotByName(name);
+  });
+  $("#btnSaveAs").addEventListener("click", promptSaveAs);
+  $("#btnSave").addEventListener("click", () => {
+    if (!state.activeSlot){ promptSaveAs(); return; }
+    if (saveSlotFromState(state.activeSlot)) toast(`已保存到「${state.activeSlot}」`);
+  });
+  $("#btnDeleteSlot").addEventListener("click", () => {
+    if (!state.activeSlot){ toast("未选择存档"); return; }
+    if (!confirm(`删除存档「${state.activeSlot}」？此操作不可恢复。`)) return;
+    deleteSlot(state.activeSlot);
+    state.activeSlot = ""; refreshSlotList(); saveSettings();
+    toast("已删除");
+  });
+  // 上传
+  $("#btnUploadFile").addEventListener("click", () => $("#uploadFileInput").click());
+  $("#uploadFileInput").addEventListener("change", e => {
+    ingestFiles(e.target.files); e.target.value = "";
+  });
+  $("#uploadUrlInput").addEventListener("keydown", e => {
+    if (e.key === "Enter"){ ingestUrl(e.target.value); e.target.value = ""; }
+  });
+  // 导出
+  $("#btnExportPNG").addEventListener("click", exportPNG);
+  $("#btnShareURL").addEventListener("click", () => {
+    const url = buildShareURL();
+    showShareURL(url);
+  });
+  $("#btnExportJSON").addEventListener("click", exportJSON);
+  $("#btnImportJSON").addEventListener("click", () => $("#jsonFileInput").click());
+  $("#jsonFileInput").addEventListener("change", e => {
+    if (e.target.files && e.target.files[0]) importJSON(e.target.files[0]);
+    e.target.value = "";
+  });
+  // 全局拖拽
+  let dragCounter = 0;
+  window.addEventListener("dragenter", e => {
+    if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes("Files")) return;
+    dragCounter++;
+    $("#dropOverlay").hidden = false;
+  });
+  window.addEventListener("dragleave", e => {
+    if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes("Files")) return;
+    dragCounter--;
+    if (dragCounter <= 0){ dragCounter = 0; $("#dropOverlay").hidden = true; }
+  });
+  window.addEventListener("dragover", e => { e.preventDefault(); });
+  window.addEventListener("drop", e => {
+    if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes("Files")) return;
+    e.preventDefault();
+    dragCounter = 0; $("#dropOverlay").hidden = true;
+    ingestFiles(e.dataTransfer.files);
+  });
+  // 全局粘贴
+  window.addEventListener("paste", e => {
+    // 不要拦截输入框里的正常粘贴
+    const tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA") return;
+    ingestClipboard(e);
+  });
+}
+
+/* ============================== 启动 ============================== */
+async function init(){
+  loadSettings();
+  loadCoverCache();
+  // 首次访问的默认值：当前日期对应的年份 + 季度（cour: 1月=1, 4月=2, 7月=3, 10月=4）
+  if (state.currentYear == null){
+    state.currentYear = new Date().getFullYear();
+  }
+  if (state.currentSeason == null){
+    state.currentSeason = Math.floor(new Date().getMonth() / 3) + 1;
+  }
+  // IndexedDB
+  try{ state.uploadsDB = await openUploadsDB(); await listUploadedImages(); }
+  catch(e){ console.warn("IndexedDB 不可用", e); toast("IndexedDB 不可用，上传功能将无法持久化"); }
+
+  bindEvents();
+  setLoading(5);
+
+  let items;
+  try{ items = await fetchBangumiData(); }
+  catch(e){ toast("数据加载失败：" + e.message); setLoading(100); return; }
+  state.rawItems = items;
+  state.yearSeasonMap = buildYearSeasonIndex(items);
+  setLoading(90);
+
+  refreshSlotList();
+
+  // 决定初始状态
+  const shareSpec = parseShareURL();
+  if (shareSpec){
+    refreshSelectors(); // 先填充年份下拉
+    applyShareSpec(shareSpec);
+  } else {
+    const cur = loadCurrent();
+    if (cur && cur.tierRows && cur.tierRows.length){
+      state.currentYear = cur.year;
+      state.currentSeason = cur.season;
+      state.typeFilter = cur.typeFilter || state.typeFilter;
+      // 重建 bangumi itemsById
+      const filtered = filterItems(state.rawItems, state.currentYear, state.currentSeason, state.typeFilter);
+      for (const it of filtered) state.itemsById["bgm_" + extractBangumiId(it)] = it;
+      state.tierRows = cur.tierRows;
+      state.trayIds = cur.trayIds || [];
+      hydrateAllRefs();
+      refreshSelectors();
+      renderAll();
+    } else {
+      // 首次启动：用当前年份 + 当前季度（若有数据），自动载入
+      refreshSelectors();
+      loadCurrentSelection({keepUploads:true, keepTierStructure:false});
+    }
+  }
+  setLoading(100);
+  state.bootDone = true;
+}
+
+window.addEventListener("DOMContentLoaded", init);
+</script>
+</body>
+</html>

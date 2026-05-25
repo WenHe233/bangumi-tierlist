@@ -149,11 +149,12 @@ h1 .sub{color:var(--text-dim);font-size:.7em;margin-left:8px;font-weight:normal;
   line-height:1.15;max-height:60%;overflow:hidden;display:none;pointer-events:none;}
 body.show-titles .card-title{display:block;}
 
-/* 导出 PNG 时临时套用：隐藏编辑控件、收紧圆角 */
+/* 导出 PNG 时临时套用：隐藏编辑控件、收紧圆角、缩小标题字号（保持多行换行） */
 body.exporting .tier-row-tools{display:none !important;}
 body.exporting .tier-label-text{font-size:1.15em;}
 body.exporting .card{border-radius:3px;}
 body.exporting .tier-row{border-radius:4px;}
+body.exporting .card-title{font-size:.56em;}
 .card-badge{position:absolute;top:2px;right:2px;background:var(--accent-2);color:#000;
   font-size:.6em;font-weight:bold;padding:1px 4px;border-radius:2px;line-height:1;pointer-events:none;}
 .card-del{position:absolute;top:2px;left:2px;width:16px;height:16px;border:none;

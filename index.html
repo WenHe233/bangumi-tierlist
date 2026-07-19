@@ -8,6 +8,9 @@
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/cn2t.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@18.0.6/lib/marked.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.7/dist/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
 <style>
 :root{
   --bg:#0f1115;
@@ -39,6 +42,7 @@ h1 .sub{color:var(--text-dim);font-size:.7em;margin-left:8px;font-weight:normal;
 #globalControls select,#globalControls button{background:var(--panel);color:var(--text);
   border:1px solid var(--border);padding:5px 10px;border-radius:4px;cursor:pointer;}
 #globalControls select:hover,#globalControls button:hover{border-color:var(--accent);}
+#commentsToggle.active{border-color:var(--accent);color:var(--accent);}
 
 #controlPanel{background:var(--panel);border:1px solid var(--border);border-radius:6px;
   padding:12px 14px;margin-bottom:14px;display:grid;gap:10px;
@@ -63,9 +67,10 @@ h1 .sub{color:var(--text-dim);font-size:.7em;margin-left:8px;font-weight:normal;
 
 #tierBoard{background:var(--panel);border:1px solid var(--border);border-radius:6px;
   padding:6px;margin-bottom:14px;}
-.tier-row{display:flex;align-items:stretch;gap:0;border-radius:4px;margin-bottom:4px;
+.tier-row{display:grid;grid-template-columns:var(--tier-w) minmax(0,1fr);align-items:stretch;
+  gap:0;border-radius:4px;margin-bottom:4px;
   background:var(--panel-2);overflow:hidden;}
-.tier-label{flex:0 0 var(--tier-w);min-height:calc(var(--card-h) + 8px);display:flex;flex-direction:column;
+.tier-label{grid-column:1;grid-row:1;min-height:calc(var(--card-h) + 8px);display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:4px;padding:6px 4px;position:relative;}
 .tier-label-text{background:transparent;border:none;outline:none;text-align:center;
   font-weight:bold;font-size:1.4em;color:inherit;width:100%;max-width:104px;}
@@ -75,10 +80,40 @@ h1 .sub{color:var(--text-dim);font-size:.7em;margin-left:8px;font-weight:normal;
   width:20px;height:20px;font-size:11px;cursor:pointer;line-height:1;padding:0;}
 .tier-row-tools button:hover{background:rgba(0,0,0,.5);}
 .tier-row-tools input[type=color]{width:20px;height:20px;border:none;background:none;cursor:pointer;padding:0;}
-.tier-cards{flex:1 1 auto;display:flex;flex-wrap:wrap;gap:4px;padding:4px;min-height:calc(var(--card-h) + 8px);
+.tier-note-action{position:absolute;top:4px;left:4px;width:20px;height:20px;border:0;border-radius:50%;
+  background:rgba(0,0,0,.32);color:inherit;cursor:pointer;opacity:0;pointer-events:none;
+  padding:0;line-height:20px;}
+.tier-label:hover .tier-note-action,.tier-note-action:focus,.tier-note-action.has-note{
+  opacity:1;pointer-events:auto;}
+.tier-note-action.has-note{background:rgba(0,0,0,.58);}
+.tier-cards{grid-column:2;grid-row:1;display:flex;flex-wrap:wrap;gap:4px;padding:4px;min-height:calc(var(--card-h) + 8px);
   background:rgba(0,0,0,.18);align-content:flex-start;}
 .tier-cards:empty::before{content:"拖动卡片到这里";color:var(--text-dim);font-size:.8em;
   align-self:center;padding-left:8px;pointer-events:none;}
+.tier-annotations{grid-column:1 / -1;grid-row:2;padding:8px 10px 10px;
+  border-top:1px solid var(--border);background:rgba(0,0,0,.12);}
+body.comments-hidden .tier-annotations{display:none;}
+.annotation-label{color:var(--accent);font-size:.75em;font-weight:bold;letter-spacing:.04em;
+  margin-bottom:3px;text-transform:uppercase;}
+.tier-note-block,.item-comment-entry{border-left:3px solid rgba(91,192,222,.45);
+  padding:5px 8px;margin:3px 0;border-radius:0 3px 3px 0;background:rgba(255,255,255,.025);}
+.tier-note-block{cursor:pointer;}
+.item-comment-head{display:flex;align-items:center;gap:6px;margin-bottom:3px;}
+.item-comment-edit{border:0;background:none;color:var(--accent);font-weight:bold;cursor:pointer;
+  padding:0;text-align:left;}
+.item-comment-title{color:var(--text-dim);font-size:.86em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.comment-expand{margin-left:auto;border:0;background:none;color:var(--text-dim);cursor:pointer;
+  font-size:.8em;padding:1px 4px;}
+.comment-body.is-collapsed{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;}
+.markdown-body{line-height:1.45;overflow-wrap:anywhere;}
+.markdown-body > :first-child{margin-top:0;}
+.markdown-body > :last-child{margin-bottom:0;}
+.markdown-body p,.markdown-body ul{margin:.35em 0;}
+.markdown-body ul{padding-left:1.4em;}
+.markdown-body h4,.markdown-body h5,.markdown-body h6{margin:.45em 0 .2em;line-height:1.25;}
+.markdown-body h4{font-size:1.05em}.markdown-body h5{font-size:1em}.markdown-body h6{font-size:.95em}
+.markdown-body code{background:rgba(0,0,0,.3);padding:.08em .3em;border-radius:3px;}
+.markdown-body a{color:var(--accent);}
 #tierActions{display:grid;grid-template-columns:1fr auto;gap:6px;margin-top:6px;}
 #btnAddRow{display:block;width:100%;background:transparent;border:1px dashed var(--border);
   color:var(--text-dim);border-radius:4px;padding:6px;cursor:pointer;}
@@ -156,19 +191,30 @@ body.show-titles .card-title{display:block;}
 /* 导出 PNG 时临时套用：隐藏编辑控件、收紧圆角、缩小标题字号（保持多行换行） */
 body.exporting .tier-row-tools{display:none !important;}
 body.exporting .card-action{display:none !important;}
+body.exporting .tier-note-action{display:none !important;}
+body.exporting .card-comment-action:not(.has-comment){display:none !important;}
+body.exporting .card-comment-action.has-comment{display:block !important;pointer-events:none;}
+body.exporting .tier-annotations{display:block !important;}
+body.exporting .comment-body.is-collapsed{display:block;-webkit-line-clamp:unset;overflow:visible;}
+body.exporting .comment-expand{display:none !important;}
 body.exporting .tier-label-text{font-size:1.15em;}
 body.exporting .card{border-radius:3px;}
 body.exporting .tier-row{border-radius:4px;}
 body.exporting .card-title{font-size:.56em;line-height:1.05;}
-.card-badge{position:absolute;top:2px;right:2px;background:var(--accent-2);color:#000;
+.card-badge{position:absolute;right:2px;bottom:2px;background:var(--accent-2);color:#000;
   font-size:.6em;font-weight:bold;padding:1px 4px;border-radius:2px;line-height:1;pointer-events:none;}
-.card-action{position:absolute;top:2px;left:2px;width:18px;height:18px;border:none;
+.card-action,.card-comment-action{position:absolute;top:2px;width:18px;height:18px;border:none;
   background:rgba(0,0,0,.6);color:#fff;border-radius:50%;cursor:pointer;font-size:11px;
   line-height:16px;padding:0;display:none;z-index:2;}
+.card-action{right:2px;}
+.card-comment-action{left:2px;}
 .card-action:hover,.card-action:focus{background:rgba(231,76,60,.9);outline:none;}
-.card.has-card-action:focus-within .card-action,.card.touch-selected .card-action{display:block;}
+.card-comment-action:hover,.card-comment-action:focus{background:rgba(91,192,222,.95);color:#071014;outline:none;}
+.card-comment-action.has-comment{display:block;background:rgba(91,192,222,.9);color:#071014;font-weight:bold;}
+.card.has-card-action:focus-within .card-action,.card.touch-selected .card-action,
+.card.has-comment-action:focus-within .card-comment-action,.card.touch-selected .card-comment-action{display:block;}
 @media (hover:hover) and (pointer:fine){
-  .card.has-card-action:hover .card-action{display:block;}
+  .card.has-card-action:hover .card-action,.card.has-comment-action:hover .card-comment-action{display:block;}
 }
 
 /* drag overlay */
@@ -180,8 +226,10 @@ body.exporting .card-title{font-size:.56em;line-height:1.05;}
 /* toast */
 #toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%);background:#000;
   color:#fff;padding:8px 16px;border-radius:4px;border:1px solid var(--border);
-  opacity:0;transition:opacity .25s;pointer-events:none;z-index:10000;max-width:80%;}
-#toast.show{opacity:.95;}
+  opacity:0;transition:opacity .25s;pointer-events:none;z-index:10000;max-width:80%;
+  display:flex;align-items:center;gap:10px;}
+#toast.show{opacity:.95;pointer-events:auto;}
+#toast button{border:0;background:none;color:var(--accent);font-weight:bold;cursor:pointer;padding:0;}
 
 /* loading */
 #loadingBar{position:fixed;left:0;top:0;height:3px;background:var(--accent);
@@ -207,6 +255,29 @@ body.exporting .card-title{font-size:.56em;line-height:1.05;}
   font-family:monospace;font-size:.85em;margin-bottom:12px;}
 #modalBox .hint{color:var(--text-dim);font-size:.85em;margin-bottom:10px;}
 
+/* comment editor */
+#commentEditorOverlay{position:fixed;inset:0;z-index:9997;background:transparent;}
+#commentEditorOverlay[hidden]{display:none;}
+#commentEditor{position:fixed;width:min(420px,calc(100vw - 24px));max-height:min(72vh,680px);
+  display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--border);
+  border-radius:7px;box-shadow:0 12px 40px rgba(0,0,0,.55);overflow:hidden;}
+.comment-editor-head{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);}
+.comment-editor-title{font-weight:bold;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.comment-editor-close{margin-left:auto;border:0;background:none;color:var(--text-dim);font-size:18px;cursor:pointer;}
+.comment-tabs{display:flex;border-bottom:1px solid var(--border);}
+.comment-tab{flex:1;border:0;background:transparent;color:var(--text-dim);padding:8px;cursor:pointer;}
+.comment-tab.active{color:var(--accent);box-shadow:inset 0 -2px var(--accent);}
+.comment-editor-pane{padding:10px 12px;overflow:auto;min-height:190px;}
+#commentTextarea{width:100%;min-height:230px;resize:vertical;background:var(--panel-2);color:var(--text);
+  border:1px solid var(--border);border-radius:4px;padding:9px;outline:none;font:inherit;line-height:1.45;}
+#commentTextarea:focus{border-color:var(--accent);}
+#commentPreview{min-height:230px;}
+.comment-editor-foot{display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid var(--border);}
+#commentCounter{color:var(--text-dim);font-size:.82em;}
+#commentClear{margin-left:auto;border:1px solid rgba(231,76,60,.45);background:transparent;
+  color:var(--danger);border-radius:4px;padding:4px 9px;cursor:pointer;}
+.comment-editor-hint{color:var(--text-dim);font-size:.78em;}
+
 footer{margin-top:20px;text-align:center;color:var(--text-dim);font-size:.8em;padding:10px;}
 footer a{color:var(--text-dim);}
 
@@ -214,6 +285,17 @@ footer a{color:var(--text-dim);}
   :root{--tier-w:60px;--card-w:64px;--card-h:90px;}
   .tier-label-text{font-size:1.1em;}
   #appHeader h1{font-size:1.05em;}
+  .tier-row-tools{transform:scale(.82);}
+  #commentEditorOverlay{background:rgba(0,0,0,.55);}
+  #commentEditor{left:0 !important;right:0;bottom:0;top:auto !important;width:100%;
+    max-height:88vh;border-radius:10px 10px 0 0;}
+  #commentTextarea,#commentPreview{min-height:42vh;}
+}
+@media (hover:none), (pointer:coarse){
+  .tier-note-action{opacity:1;pointer-events:auto;}
+  #commentEditorOverlay{background:rgba(0,0,0,.55);}
+  #commentEditor{left:0 !important;right:0;bottom:0;top:auto !important;width:100%;
+    max-height:88vh;border-radius:10px 10px 0 0;}
 }
 </style>
 </head>
@@ -231,6 +313,7 @@ footer a{color:var(--text-dim);}
       <option value="ja">日本語</option>
     </select>
     <button id="cardModeToggle" title="切换卡片显示模式">封面+标题</button>
+    <button id="commentsToggle" class="active" title="显示或隐藏评论正文">隐藏注释</button>
   </div>
 </header>
 
@@ -310,6 +393,7 @@ footer a{color:var(--text-dim);}
 
 <div id="dropOverlay" hidden>松开鼠标以上传图片</div>
 <div id="modalOverlay" hidden><div id="modalBox"></div></div>
+<div id="commentEditorOverlay" hidden><section id="commentEditor" role="dialog" aria-modal="true"></section></div>
 <div id="toast"></div>
 
 <script>
@@ -344,7 +428,10 @@ const LS_CURRENT = "tier_maker_current";
 const LS_SLOTS = "tier_maker_slots";
 const DB_NAME = "tier_maker_uploads";
 const DB_STORE = "uploads";
-const SHARE_VER = 1;
+const SHARE_VER = 2;
+const ITEM_COMMENT_MAX = 1000;
+const TIER_NOTE_MAX = 200;
+const SHARE_URL_MAX = 8192;
 const MAX_EDGE = 800;
 const JPEG_Q = 0.85;
 
@@ -356,10 +443,12 @@ const state = {
   currentYear: null,
   currentSeason: null,    // 0=整年, 1/2/3/4
   typeFilter: {tv:true, web:true, movie:false, ova:false},
-  tierRows: [],           // [{id, label, color, itemIds:[]}]
+  tierRows: [],           // [{id, label, color, itemIds:[], note:""}]
   trayIds: [],
+  itemComments: {},       // { itemId: markdown }
   lang: "zh-Hans",
   cardMode: "cover-title",// or "cover-only"
+  commentsVisible: true,
   activeSlot: "",
   pendingShareSpec: null, // 解析自 URL 但尚未应用
   uploadsDB: null,
@@ -372,9 +461,64 @@ const $ = sel => document.querySelector(sel);
 const $$ = sel => Array.from(document.querySelectorAll(sel));
 const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
 
-function toast(msg, ms=2200){
-  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+function toast(msg, ms=2200, action=null){
+  const t = $("#toast");
+  t.innerHTML = "";
+  const text = document.createElement("span");
+  text.textContent = msg;
+  t.appendChild(text);
+  if (action && typeof action.onClick === "function"){
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = action.label || "撤销";
+    button.onclick = () => {
+      clearTimeout(toast._h);
+      t.classList.remove("show");
+      action.onClick();
+    };
+    t.appendChild(button);
+  }
+  t.classList.add("show");
   clearTimeout(toast._h); toast._h = setTimeout(()=>t.classList.remove("show"), ms);
+}
+function renderMarkdown(markdown){
+  const source = String(markdown || "");
+  if (!source) return "";
+  if (typeof marked === "undefined" || typeof DOMPurify === "undefined"){
+    return escapeHtml(source).replace(/\n/g, "<br>");
+  }
+  let html;
+  try{
+    html = marked.parse(source, { gfm:true, breaks:true });
+  }catch(_){
+    return escapeHtml(source).replace(/\n/g, "<br>");
+  }
+  html = html.replace(/<(\/?)h([1-6])(?=[\s>])/gi, (_match, slash, level) => {
+    const compactLevel = Number(level) <= 2 ? 4 : Number(level) <= 4 ? 5 : 6;
+    return `<${slash}h${compactLevel}`;
+  });
+  const clean = DOMPurify.sanitize(html, {
+    ALLOWED_TAGS:["p","br","strong","em","del","code","a","ul","li","h4","h5","h6"],
+    ALLOWED_ATTR:["href","title"],
+    ALLOW_DATA_ATTR:false,
+    ALLOW_ARIA_ATTR:false,
+  });
+  const template = document.createElement("template");
+  template.innerHTML = clean;
+  template.content.querySelectorAll("a").forEach(link => {
+    const raw = link.getAttribute("href") || "";
+    let safe = false;
+    try{
+      const url = new URL(raw, location.href);
+      safe = ["http:","https:","mailto:"].includes(url.protocol);
+    }catch(_){}
+    if (!safe) link.removeAttribute("href");
+    else {
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+    }
+  });
+  return template.innerHTML;
 }
 function setLoading(pct){
   const bar = $("#loadingBar");
@@ -396,6 +540,20 @@ function isValidItemId(id){
 function normalizeItemIds(ids){
   return Array.isArray(ids) ? [...new Set(ids.filter(isValidItemId))] : [];
 }
+function normalizeCommentText(value, maxLength){
+  if (typeof value !== "string") return "";
+  return value.replace(/\r\n?/g, "\n").slice(0, maxLength);
+}
+function normalizeItemComments(comments){
+  const normalized = Object.create(null);
+  if (!comments || typeof comments !== "object" || Array.isArray(comments)) return normalized;
+  for (const [id, value] of Object.entries(comments)){
+    if (!isValidItemId(id)) continue;
+    const text = normalizeCommentText(value, ITEM_COMMENT_MAX);
+    if (text.trim()) normalized[id] = text;
+  }
+  return normalized;
+}
 function normalizeTierRows(rows, regenerateIds=false){
   if (!Array.isArray(rows)) return [];
   return rows.filter(row => row && typeof row === "object").map(row => ({
@@ -403,6 +561,7 @@ function normalizeTierRows(rows, regenerateIds=false){
     label: typeof row.label === "string" ? row.label.slice(0, 8) : "新",
     color: normalizeColor(row.color),
     itemIds: normalizeItemIds(row.itemIds),
+    note: normalizeCommentText(row.note, TIER_NOTE_MAX),
   }));
 }
 
@@ -659,6 +818,7 @@ function loadSettings(){
     const s = JSON.parse(localStorage.getItem(LS_SETTINGS)) || {};
     if (s.lang) state.lang = s.lang;
     if (s.cardMode) state.cardMode = s.cardMode;
+    if (typeof s.commentsVisible === "boolean") state.commentsVisible = s.commentsVisible;
     if (s.typeFilter) state.typeFilter = Object.assign({}, state.typeFilter, s.typeFilter);
     if (s.currentYear) state.currentYear = s.currentYear;
     if (s.currentSeason !== undefined) state.currentSeason = s.currentSeason;
@@ -670,7 +830,7 @@ function saveSettings(){
     localStorage.setItem(LS_SETTINGS, JSON.stringify({
       lang: state.lang, cardMode: state.cardMode, typeFilter: state.typeFilter,
       currentYear: state.currentYear, currentSeason: state.currentSeason,
-      activeSlot: state.activeSlot,
+      activeSlot: state.activeSlot, commentsVisible: state.commentsVisible,
     }));
   }catch(e){ toast("设置保存失败：" + e.message); }
 }
@@ -680,6 +840,7 @@ function saveCurrent(){
       year: state.currentYear, season: state.currentSeason,
       typeFilter: state.typeFilter,
       tierRows: state.tierRows, trayIds: state.trayIds,
+      itemComments: state.itemComments,
     }));
   }catch(e){ toast("自动保存失败：" + e.message); }
 }
@@ -806,6 +967,7 @@ async function removeUploadedImage(id){
   }
   try{ URL.revokeObjectURL(state.itemsById[id].blobUrl); }catch(_){}
   delete state.itemsById[id];
+  delete state.itemComments[id];
   rebuildTrayIds();
   renderAll(); saveCurrent();
 }
@@ -858,6 +1020,159 @@ async function ingestClipboard(e){
   }
 }
 
+/* ============================== 评论编辑器 ============================== */
+let commentEditorState = null;
+let commentSaveTimer = null;
+const expandedComments = new Set();
+
+function getCommentTargetValue(target){
+  if (target.kind === "item") return state.itemComments[target.id] || "";
+  const row = state.tierRows.find(r => r.id === target.id);
+  return row ? (row.note || "") : "";
+}
+function setCommentTargetValue(target, value){
+  const maxLength = target.kind === "item" ? ITEM_COMMENT_MAX : TIER_NOTE_MAX;
+  const text = normalizeCommentText(value, maxLength);
+  if (target.kind === "item"){
+    if (text.trim()) state.itemComments[target.id] = text;
+    else delete state.itemComments[target.id];
+    return;
+  }
+  const row = state.tierRows.find(r => r.id === target.id);
+  if (row) row.note = text.trim() ? text : "";
+}
+function flushCommentSave(){
+  clearTimeout(commentSaveTimer);
+  commentSaveTimer = null;
+  saveCurrent();
+}
+function queueCommentSave(){
+  clearTimeout(commentSaveTimer);
+  commentSaveTimer = setTimeout(flushCommentSave, 300);
+}
+function updateCommentEditorPreview(){
+  if (!commentEditorState) return;
+  const text = $("#commentTextarea")?.value || "";
+  const preview = $("#commentPreview");
+  if (preview) preview.innerHTML = renderMarkdown(text) || '<p class="comment-editor-hint">暂无内容</p>';
+  const counter = $("#commentCounter");
+  if (counter) counter.textContent = `${text.length} / ${commentEditorState.maxLength}`;
+}
+function switchCommentEditorTab(tab){
+  const editing = tab === "edit";
+  $$(".comment-tab").forEach(button => {
+    const selected = button.dataset.tab === tab;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-selected", String(selected));
+  });
+  $("#commentEditPane").hidden = !editing;
+  $("#commentPreviewPane").hidden = editing;
+  if (!editing) updateCommentEditorPreview();
+}
+function positionCommentEditor(trigger){
+  const editor = $("#commentEditor");
+  editor.style.left = "";
+  editor.style.top = "";
+  if (!trigger || usesTouchCardActions() || window.innerWidth <= 700) return;
+  const rect = trigger.getBoundingClientRect();
+  const width = Math.min(420, window.innerWidth - 24);
+  const height = Math.min(editor.offsetHeight || 520, window.innerHeight * .72);
+  const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
+  const below = rect.bottom + 8;
+  const top = below + height <= window.innerHeight - 12
+    ? below
+    : Math.max(12, rect.top - height - 8);
+  editor.style.left = left + "px";
+  editor.style.top = top + "px";
+}
+function openCommentEditor(target, trigger){
+  if (commentEditorState) closeCommentEditor({rerender:false});
+  const maxLength = target.kind === "item" ? ITEM_COMMENT_MAX : TIER_NOTE_MAX;
+  commentEditorState = {...target, maxLength};
+  const overlay = $("#commentEditorOverlay");
+  const editor = $("#commentEditor");
+  editor.setAttribute("aria-label", `${target.title} 评论编辑器`);
+  editor.innerHTML = `
+    <div class="comment-editor-head">
+      <span class="comment-editor-title">${escapeHtml(target.title)}</span>
+      <button type="button" class="comment-editor-close" aria-label="关闭评论编辑器">×</button>
+    </div>
+    <div class="comment-tabs" role="tablist">
+      <button type="button" class="comment-tab active" data-tab="edit" role="tab" aria-selected="true">编辑</button>
+      <button type="button" class="comment-tab" data-tab="preview" role="tab" aria-selected="false">预览</button>
+    </div>
+    <div id="commentEditPane" class="comment-editor-pane">
+      <textarea id="commentTextarea" maxlength="${maxLength}" aria-label="Markdown 评论"></textarea>
+      <div class="comment-editor-hint">支持标题、强调、删除线、行内代码、链接、无序列表和换行</div>
+    </div>
+    <div id="commentPreviewPane" class="comment-editor-pane" hidden>
+      <div id="commentPreview" class="markdown-body"></div>
+    </div>
+    <div class="comment-editor-foot">
+      <span id="commentCounter"></span>
+      <span class="comment-editor-hint">实时保存</span>
+      <button type="button" id="commentClear">清除</button>
+    </div>
+  `;
+  const textarea = $("#commentTextarea");
+  textarea.value = getCommentTargetValue(target);
+  textarea.addEventListener("input", () => {
+    const normalized = normalizeCommentText(textarea.value, maxLength);
+    if (textarea.value !== normalized) textarea.value = normalized;
+    setCommentTargetValue(target, textarea.value);
+    updateCommentEditorPreview();
+    queueCommentSave();
+  });
+  editor.querySelectorAll(".comment-tab").forEach(button => {
+    button.onclick = () => switchCommentEditorTab(button.dataset.tab);
+  });
+  editor.querySelector(".comment-editor-close").onclick = closeCommentEditor;
+  $("#commentClear").onclick = () => {
+    const oldValue = getCommentTargetValue(target);
+    if (!oldValue) return;
+    setCommentTargetValue(target, "");
+    textarea.value = "";
+    updateCommentEditorPreview();
+    flushCommentSave();
+    renderTierBoard();
+    toast("评论已清除", 5000, {
+      label:"撤销",
+      onClick:() => {
+        setCommentTargetValue(target, oldValue);
+        if (commentEditorState && commentEditorState.kind === target.kind && commentEditorState.id === target.id){
+          const currentTextarea = $("#commentTextarea");
+          if (currentTextarea) currentTextarea.value = oldValue;
+          updateCommentEditorPreview();
+        }
+        saveCurrent();
+        renderTierBoard();
+      },
+    });
+  };
+  overlay.hidden = false;
+  updateCommentEditorPreview();
+  positionCommentEditor(trigger);
+  requestAnimationFrame(() => textarea.focus());
+}
+function closeCommentEditor({rerender=true} = {}){
+  if (!commentEditorState) return;
+  flushCommentSave();
+  commentEditorState = null;
+  $("#commentEditorOverlay").hidden = true;
+  if (rerender) renderTierBoard();
+}
+function openItemCommentEditor(id, trigger){
+  const item = state.itemsById[id];
+  const title = item
+    ? (item._kind === "upl" ? (item.title || "上传图片") : getTitle(item, state.lang))
+    : (id.startsWith("phantom_") ? "[本地图]" : "已下架作品");
+  openCommentEditor({kind:"item", id, title}, trigger);
+}
+function openTierNoteEditor(rowId, trigger){
+  const row = state.tierRows.find(r => r.id === rowId);
+  if (row) openCommentEditor({kind:"tier", id:rowId, title:`${row.label || "未命名"} · Tier 注释`}, trigger);
+}
+
 /* ============================== 渲染 ============================== */
 function renderAll(){
   renderTierBoard();
@@ -867,6 +1182,9 @@ function renderAll(){
 function updateCardModeClass(){
   document.body.classList.toggle("show-titles", state.cardMode === "cover-title");
   $("#cardModeToggle").textContent = state.cardMode === "cover-title" ? "封面+标题" : "纯封面";
+  document.body.classList.toggle("comments-hidden", !state.commentsVisible);
+  $("#commentsToggle").classList.toggle("active", state.commentsVisible);
+  $("#commentsToggle").textContent = state.commentsVisible ? "隐藏注释" : "显示注释";
 }
 function renderTierBoard(){
   const board = $("#tierBoard");
@@ -878,6 +1196,7 @@ function renderTierBoard(){
 }
 function renderRow(row){
   row.color = normalizeColor(row.color);
+  row.note = normalizeCommentText(row.note, TIER_NOTE_MAX);
   const el = document.createElement("div");
   el.className = "tier-row";
   el.dataset.rowId = row.id;
@@ -887,6 +1206,8 @@ function renderRow(row){
   label.style.color = textColorOn(row.color);
   label.innerHTML = `
     <input class="tier-label-text" maxlength="8" value="${escapeAttr(row.label)}">
+    <button type="button" class="tier-note-action${row.note.trim() ? " has-note" : ""}"
+            title="编辑 Tier 注释" aria-label="编辑 ${escapeAttr(row.label || "当前")} Tier 注释">✎</button>
     <div class="tier-row-tools">
       <input type="color" value="${row.color}" title="颜色">
       <button data-act="up" title="上移">▲</button>
@@ -897,6 +1218,10 @@ function renderRow(row){
   label.querySelector(".tier-label-text").addEventListener("input", e => {
     row.label = e.target.value;
     saveCurrent();
+  });
+  label.querySelector(".tier-note-action").addEventListener("click", e => {
+    e.stopPropagation();
+    openTierNoteEditor(row.id, e.currentTarget);
   });
   label.querySelector("input[type=color]").addEventListener("input", e => {
     row.color = e.target.value;
@@ -915,12 +1240,76 @@ function renderRow(row){
   const cards = document.createElement("div");
   cards.className = "tier-cards";
   cards.dataset.rowId = row.id;
+  let commentIndex = 0;
   for (const id of row.itemIds){
-    cards.appendChild(renderCard(id, {inTier:true}));
+    const hasComment = !!(state.itemComments[id] || "").trim();
+    if (hasComment) commentIndex++;
+    cards.appendChild(renderCard(id, {inTier:true, commentIndex:hasComment ? commentIndex : null}));
   }
   el.appendChild(label);
   el.appendChild(cards);
+  const annotations = renderTierAnnotations(row);
+  if (annotations) el.appendChild(annotations);
   return el;
+}
+function renderTierAnnotations(row){
+  const commentedItems = row.itemIds
+    .map(id => ({id, text:state.itemComments[id] || ""}))
+    .filter(entry => entry.text.trim());
+  if (!row.note.trim() && !commentedItems.length) return null;
+  const section = document.createElement("section");
+  section.className = "tier-annotations";
+  section.setAttribute("aria-label", `${row.label || "当前"} Tier 注释`);
+  if (row.note.trim()){
+    const note = document.createElement("div");
+    note.className = "tier-note-block";
+    note.tabIndex = 0;
+    note.innerHTML = `<div class="annotation-label">Tier 注释</div>
+      <div class="markdown-body">${renderMarkdown(row.note)}</div>`;
+    note.addEventListener("click", e => {
+      if (e.target.closest("a")) return;
+      openTierNoteEditor(row.id, note);
+    });
+    note.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " "){
+        e.preventDefault();
+        openTierNoteEditor(row.id, note);
+      }
+    });
+    section.appendChild(note);
+  }
+  commentedItems.forEach((entry, index) => {
+    const item = state.itemsById[entry.id];
+    const title = item
+      ? (item._kind === "upl" ? (item.title || "上传图片") : getTitle(item, state.lang))
+      : (entry.id.startsWith("phantom_") ? "[本地图]" : "已下架作品");
+    const key = `${row.id}:${entry.id}`;
+    const expanded = expandedComments.has(key);
+    const canCollapse = entry.text.length > 160 || entry.text.split("\n").length > 3;
+    const block = document.createElement("article");
+    block.className = "item-comment-entry";
+    block.innerHTML = `
+      <div class="item-comment-head">
+        <button type="button" class="item-comment-edit" aria-label="编辑 ${escapeAttr(title)} 的评论">${index + 1}.</button>
+        <span class="item-comment-title">${escapeHtml(title)}</span>
+        ${canCollapse ? `<button type="button" class="comment-expand">${expanded ? "收起" : "展开"}</button>` : ""}
+      </div>
+      <div class="comment-body markdown-body${canCollapse && !expanded ? " is-collapsed" : ""}">${renderMarkdown(entry.text)}</div>
+    `;
+    block.querySelector(".item-comment-edit").onclick = e => openItemCommentEditor(entry.id, e.currentTarget);
+    const expandButton = block.querySelector(".comment-expand");
+    if (expandButton){
+      expandButton.onclick = () => {
+        if (expandedComments.has(key)) expandedComments.delete(key);
+        else expandedComments.add(key);
+        const body = block.querySelector(".comment-body");
+        body.classList.toggle("is-collapsed", !expandedComments.has(key));
+        expandButton.textContent = expandedComments.has(key) ? "收起" : "展开";
+      };
+    }
+    section.appendChild(block);
+  });
+  return section;
 }
 function renderTray(){
   // 实际渲染逻辑全部交给 applyTraySearch（它能区分无搜索 / 全局搜索两种模式）
@@ -935,6 +1324,7 @@ function usesTouchCardActions(){
 }
 function addCardAction(card, title, handler){
   card.classList.add("has-card-action");
+  card.tabIndex = 0;
   const button = document.createElement("button");
   button.type = "button";
   button.className = "card-action";
@@ -949,17 +1339,36 @@ function addCardAction(card, title, handler){
   });
   card.appendChild(button);
 }
+function addCardCommentAction(card, id, commentIndex){
+  card.classList.add("has-comment-action");
+  card.tabIndex = 0;
+  const hasComment = commentIndex != null;
+  if (hasComment) card.classList.add("has-comment");
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "card-comment-action" + (hasComment ? " has-comment" : "");
+  button.title = hasComment ? `编辑评论（脚注 ${commentIndex}）` : "添加评论";
+  button.setAttribute("aria-label", button.title);
+  button.textContent = hasComment ? String(commentIndex) : "✎";
+  button.addEventListener("pointerdown", e => e.stopPropagation());
+  button.addEventListener("click", e => {
+    e.stopPropagation();
+    clearTouchCardSelection();
+    openItemCommentEditor(id, button);
+  });
+  card.appendChild(button);
+}
 function bindTouchCardSelection(card){
   card.addEventListener("click", e => {
-    if (!usesTouchCardActions() || e.target.closest(".card-action")) return;
+    if (!usesTouchCardActions() || e.target.closest(".card-action,.card-comment-action")) return;
     const wasSelected = card.classList.contains("touch-selected");
     clearTouchCardSelection();
-    if (!wasSelected && card.classList.contains("has-card-action")){
+    if (!wasSelected && (card.classList.contains("has-card-action") || card.classList.contains("has-comment-action"))){
       card.classList.add("touch-selected");
     }
   });
 }
-function renderCard(id, {inTier=false} = {}){
+function renderCard(id, {inTier=false, commentIndex=null} = {}){
   const item = state.itemsById[id];
   const card = document.createElement("div");
   card.className = "card";
@@ -968,6 +1377,7 @@ function renderCard(id, {inTier=false} = {}){
     card.classList.add(id.startsWith("phantom_") ? "is-phantom" : "is-missing");
     card.dataset.kind = id.startsWith("phantom_") ? "phantom" : "missing";
     card.title = id.startsWith("phantom_") ? "[本地图]（原作者本地图片，仅占位）" : "已下架/未在当前数据集";
+    if (inTier) addCardCommentAction(card, id, commentIndex);
     if (inTier) addCardAction(card, "移回未分级", () => returnTierItem(id));
     bindTouchCardSelection(card);
     return card;
@@ -981,6 +1391,7 @@ function renderCard(id, {inTier=false} = {}){
       <span class="card-title">${escapeHtml(item.title || "")}</span>
       <span class="card-badge">U</span>
     `;
+    if (inTier) addCardCommentAction(card, id, commentIndex);
     addCardAction(card, "永久删除此上传", () => removeUploadedImage(id));
   } else {
     card.dataset.kind = "bgm";
@@ -993,6 +1404,7 @@ function renderCard(id, {inTier=false} = {}){
       <span class="card-title">${escapeHtml(title)}</span>
     `;
     attachCover(card.querySelector(".card-cover"), bgmId);
+    if (inTier) addCardCommentAction(card, id, commentIndex);
     if (inTier) addCardAction(card, "移回未分级", () => returnTierItem(id));
   }
   bindTouchCardSelection(card);
@@ -1124,7 +1536,7 @@ function loadCurrentSelection({keepUploads=true, keepTierStructure=true} = {}){
   }
   // 重建 tier rows
   if (!keepTierStructure || !state.tierRows.length){
-    state.tierRows = DEFAULT_TIERS.map((t,i) => ({ id: "r_"+uid(), label:t.label, color:t.color, itemIds:[] }));
+    state.tierRows = DEFAULT_TIERS.map(t => ({ id:"r_"+uid(), label:t.label, color:t.color, itemIds:[], note:"" }));
   } else {
     // 保留所有还存在的 item（上传 + 当前 cour 的 bangumi + 跨 cour 已放置的 bangumi）
     for (const row of state.tierRows){
@@ -1137,13 +1549,14 @@ function loadCurrentSelection({keepUploads=true, keepTierStructure=true} = {}){
 
 /* ============================== Tier 行操作 ============================== */
 function addRow(){
-  state.tierRows.push({ id:"r_"+uid(), label:"新", color:"#7f8c8d", itemIds:[] });
+  state.tierRows.push({ id:"r_"+uid(), label:"新", color:"#7f8c8d", itemIds:[], note:"" });
   renderTierBoard(); saveCurrent();
 }
 function resetCurrentList(){
   state.tierRows = DEFAULT_TIERS.map(t => ({
-    id:"r_"+uid(), label:t.label, color:t.color, itemIds:[],
+    id:"r_"+uid(), label:t.label, color:t.color, itemIds:[], note:"",
   }));
+  closeCommentEditor({rerender:false});
   state.activeSlot = "";
   $("#slotSelect").value = "";
   $("#traySearch").value = "";
@@ -1158,7 +1571,7 @@ function promptResetCurrentList(){
   showModal(`
     <h3>重置当前列表</h3>
     <p class="hint">所有排名和自定义层级将被清空，并恢复默认 S–F 层级。</p>
-    <p class="hint">命名存档和上传图片不会删除。</p>
+    <p class="hint">作品评论会保留，Tier 注释会随层级清除；命名存档和上传图片不会删除。</p>
     <div class="actions">
       <button id="modalCancel">取消</button>
       <button id="modalOk" class="danger">确认重置</button>
@@ -1210,8 +1623,11 @@ function initSortables(){
   const opts = {
     group:{ name:"tiermaker", pull:true, put:true },
     animation:120, delay:150, delayOnTouchOnly:true, fallbackOnBody:true,
-    filter:".card-action", preventOnFilter:false,
-    onStart: clearTouchCardSelection,
+    filter:".card-action,.card-comment-action", preventOnFilter:false,
+    onStart: () => {
+      clearTouchCardSelection();
+      closeCommentEditor({rerender:false});
+    },
     onEnd: (evt) => syncStateFromDOM(evt),
   };
   $$(".tier-cards").forEach(el => {
@@ -1292,7 +1708,7 @@ function buildShareURL(){
   const rowParts = state.tierRows.map(row => {
     const ids = row.itemIds.map(id => {
       if (id.startsWith("bgm_")) return id.slice(4);
-      if (id.startsWith("upl_")) return "*";
+      if (id.startsWith("upl_") || id.startsWith("phantom_")) return "*";
       return "";
     }).filter(Boolean).join(".");
     const encodedLabel = encodeURIComponent(String(row.label)).replace(/~/g, "%7E");
@@ -1300,9 +1716,25 @@ function buildShareURL(){
   }).join("|");
   // 整个值再编码一层，避免 URLSearchParams 提前解码层级名中的 |、:、~、% 等分隔字符。
   parts.push("r=" + encodeURIComponent(rowParts));
+  const commentPayload = { r:[], i:[] };
+  state.tierRows.forEach((row, rowIndex) => {
+    if ((row.note || "").trim()) commentPayload.r.push([rowIndex, normalizeCommentText(row.note, TIER_NOTE_MAX)]);
+    row.itemIds.forEach((id, itemIndex) => {
+      const comment = normalizeCommentText(state.itemComments[id], ITEM_COMMENT_MAX);
+      if (comment.trim()) commentPayload.i.push([rowIndex, itemIndex, comment]);
+    });
+  });
+  if (commentPayload.r.length || commentPayload.i.length){
+    if (typeof LZString === "undefined"){
+      return { error:"评论压缩组件未加载，无法安全生成含评论的分享链接。" };
+    }
+    const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(commentPayload));
+    if (!compressed) return { error:"评论压缩失败，请改用 JSON 或 PNG。" };
+    parts.push("c=" + compressed);
+  }
   // 未排名上传隐去；未排名 bangumi 不带（重建时自动从季度数据填）
   const url = location.origin + location.pathname + "?" + parts.join("&");
-  return url;
+  return { url, tooLong:url.length > SHARE_URL_MAX };
 }
 function parseShareURL(){
   const q = new URLSearchParams(location.search);
@@ -1313,6 +1745,7 @@ function parseShareURL(){
     season: parseInt(q.get("q"), 10) || 0,
     typeFilter: { tv:false, web:false, movie:false, ova:false },
     rows: [],
+    comments: {r:[], i:[]},
   };
   const tf = q.get("t") || "";
   if (tf.includes("t")) spec.typeFilter.tv = true;
@@ -1333,6 +1766,24 @@ function parseShareURL(){
       .filter(tok => tok === "*" || /^\d+$/.test(tok));
     spec.rows.push({ label, color, ids });
   }
+  const compressedComments = q.get("c");
+  if (compressedComments){
+    if (typeof LZString === "undefined"){
+      spec.commentError = "评论压缩组件未加载，排名已恢复但评论无法读取。";
+    } else {
+      try{
+        const json = LZString.decompressFromEncodedURIComponent(compressedComments);
+        if (!json || json.length > 200000) throw new Error("invalid comment payload");
+        const comments = JSON.parse(json);
+        if (comments && typeof comments === "object"){
+          if (Array.isArray(comments.r)) spec.comments.r = comments.r.slice(0, 100);
+          if (Array.isArray(comments.i)) spec.comments.i = comments.i.slice(0, 2000);
+        }
+      }catch(_){
+        spec.commentError = "分享链接中的评论数据无效，排名已恢复。";
+      }
+    }
+  }
   return spec;
 }
 function applyShareSpec(spec){
@@ -1352,16 +1803,29 @@ function applyShareSpec(spec){
       if (tok === "*") return "phantom_" + (pIdx++);
       return "bgm_" + tok;
     });
-    return { id:"r_"+uid(), label:r.label, color:r.color, itemIds: ids };
+    return { id:"r_"+uid(), label:r.label, color:r.color, itemIds:ids, note:"" };
   });
   if (!state.tierRows.length){
-    state.tierRows = DEFAULT_TIERS.map(t => ({ id:"r_"+uid(), label:t.label, color:t.color, itemIds:[] }));
+    state.tierRows = DEFAULT_TIERS.map(t => ({ id:"r_"+uid(), label:t.label, color:t.color, itemIds:[], note:"" }));
+  }
+  state.itemComments = Object.create(null);
+  for (const entry of spec.comments?.r || []){
+    if (!Array.isArray(entry) || !Number.isInteger(entry[0])) continue;
+    const row = state.tierRows[entry[0]];
+    if (row) row.note = normalizeCommentText(entry[1], TIER_NOTE_MAX);
+  }
+  for (const entry of spec.comments?.i || []){
+    if (!Array.isArray(entry) || !Number.isInteger(entry[0]) || !Number.isInteger(entry[1])) continue;
+    const id = state.tierRows[entry[0]]?.itemIds[entry[1]];
+    const comment = normalizeCommentText(entry[2], ITEM_COMMENT_MAX);
+    if (id && comment.trim()) state.itemComments[id] = comment;
   }
   hydrateAllRefs(); // 补齐 tier 行里的跨 cour 项
   // 同步 UI
   refreshSelectors();
   rebuildTrayIds();
   renderAll(); saveSettings(); saveCurrent();
+  if (spec.commentError) toast(spec.commentError, 4200);
   // 清掉 URL ?s=... 避免刷新再次套用旧分享
   history.replaceState(null, "", location.pathname);
 }
@@ -1387,13 +1851,14 @@ async function exportJSON(){
     }catch(e){ console.warn("无法导出上传项", id, e); }
   }
   const payload = {
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     state: {
       year: state.currentYear, season: state.currentSeason,
       typeFilter: state.typeFilter,
       tierRows: state.tierRows,
       trayIds: state.trayIds,
+      itemComments: state.itemComments,
       lang: state.lang, cardMode: state.cardMode,
     },
     uploads,
@@ -1457,8 +1922,9 @@ async function importJSON(file){
   const filtered = filterItems(state.rawItems, state.currentYear, state.currentSeason, state.typeFilter);
   for (const it of filtered) state.itemsById["bgm_" + extractBangumiId(it)] = it;
   state.tierRows = normalizeTierRows(s.tierRows, true);
+  state.itemComments = normalizeItemComments(s.itemComments);
   if (!state.tierRows.length){
-    state.tierRows = DEFAULT_TIERS.map(t => ({ id:"r_"+uid(), label:t.label, color:t.color, itemIds:[] }));
+    state.tierRows = DEFAULT_TIERS.map(t => ({ id:"r_"+uid(), label:t.label, color:t.color, itemIds:[], note:"" }));
   }
   hydrateAllRefs();
   refreshSelectors();
@@ -1498,7 +1964,25 @@ function promptSaveAs(){
   };
   input.addEventListener("keydown", e => { if (e.key === "Enter") $("#modalOk").click(); });
 }
-function showShareURL(url){
+function showShareURL(result){
+  if (!result || result.error || result.tooLong){
+    const message = result?.error || `含评论的分享链接超过 ${(SHARE_URL_MAX/1024).toFixed(0)} KB，可能被浏览器或聊天软件截断。`;
+    showModal(`
+      <h3>无法安全生成分享链接</h3>
+      <p class="hint" style="color:#f0ad4e">${escapeHtml(message)}</p>
+      <p class="hint">请改用 JSON 保留全部评论，或导出 PNG 分享当前榜单。</p>
+      <div class="actions">
+        <button id="modalCancel">关闭</button>
+        <button id="modalExportPNG">导出 PNG</button>
+        <button id="modalExportJSON" class="primary">导出 JSON</button>
+      </div>
+    `);
+    $("#modalCancel").onclick = hideModal;
+    $("#modalExportPNG").onclick = () => { hideModal(); exportPNG(); };
+    $("#modalExportJSON").onclick = () => { hideModal(); exportJSON(); };
+    return;
+  }
+  const url = result.url;
   const sizeKB = (url.length / 1024).toFixed(2);
   const tooLong = url.length > 2000;
   showModal(`
@@ -1527,6 +2011,7 @@ function saveSlotFromState(name){
     year: state.currentYear, season: state.currentSeason,
     typeFilter: state.typeFilter,
     tierRows: state.tierRows, trayIds: state.trayIds,
+    itemComments: state.itemComments,
     savedAt: Date.now(),
   };
   const ok = saveSlot(name, data);
@@ -1550,8 +2035,9 @@ function loadSlotByName(name){
   const filtered = filterItems(state.rawItems, state.currentYear, state.currentSeason, state.typeFilter);
   for (const it of filtered) state.itemsById["bgm_" + extractBangumiId(it)] = it;
   state.tierRows = normalizeTierRows(d.tierRows, true);
+  state.itemComments = normalizeItemComments(d.itemComments);
   if (!state.tierRows.length){
-    state.tierRows = DEFAULT_TIERS.map(t => ({ id:"r_"+uid(), label:t.label, color:t.color, itemIds:[] }));
+    state.tierRows = DEFAULT_TIERS.map(t => ({ id:"r_"+uid(), label:t.label, color:t.color, itemIds:[], note:"" }));
   }
   state.activeSlot = name;
   hydrateAllRefs();
@@ -1566,6 +2052,12 @@ function bindEvents(){
   document.addEventListener("click", e => {
     if (!e.target.closest || !e.target.closest(".card")) clearTouchCardSelection();
   });
+  $("#commentEditorOverlay").addEventListener("click", e => {
+    if (e.target === $("#commentEditorOverlay")) closeCommentEditor();
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && commentEditorState) closeCommentEditor();
+  });
   // 全局控制
   $("#langSelect").addEventListener("change", e => {
     state.lang = e.target.value; saveSettings(); renderAll();
@@ -1573,6 +2065,11 @@ function bindEvents(){
   $("#cardModeToggle").addEventListener("click", () => {
     state.cardMode = state.cardMode === "cover-title" ? "cover-only" : "cover-title";
     updateCardModeClass(); saveSettings();
+  });
+  $("#commentsToggle").addEventListener("click", () => {
+    state.commentsVisible = !state.commentsVisible;
+    updateCardModeClass();
+    saveSettings();
   });
   // 数据源选择 — 实时生效
   const reloadSelection = () => loadCurrentSelection({keepUploads:true, keepTierStructure:true});
@@ -1622,8 +2119,7 @@ function bindEvents(){
   $("#btnExportPNG").addEventListener("click", exportPNG);
   $("#btnCopyPNG").addEventListener("click", copyPNG);
   $("#btnShareURL").addEventListener("click", () => {
-    const url = buildShareURL();
-    showShareURL(url);
+    showShareURL(buildShareURL());
   });
   $("#btnExportJSON").addEventListener("click", exportJSON);
   $("#btnImportJSON").addEventListener("click", () => $("#jsonFileInput").click());
@@ -1701,6 +2197,7 @@ async function init(){
       const filtered = filterItems(state.rawItems, state.currentYear, state.currentSeason, state.typeFilter);
       for (const it of filtered) state.itemsById["bgm_" + extractBangumiId(it)] = it;
       state.tierRows = normalizeTierRows(cur.tierRows, true);
+      state.itemComments = normalizeItemComments(cur.itemComments);
       hydrateAllRefs();
       refreshSelectors();
       rebuildTrayIds();

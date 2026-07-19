@@ -6,6 +6,7 @@
 
 - 选年份 + 季度（含「整年」），从 [bangumi-data](https://github.com/bangumi-data/bangumi-data) 自动加载番剧
 - S/A/B/C/D/F 行可重命名、改色、增删、调顺
+- 为 Tier 和已排名作品添加 Markdown 注释，支持脚注展示、存档、分享与 PNG 导出
 - 鼠标 / 触屏拖拽（SortableJS）
 - 标题语言切换：简中 / 繁中 / English / 日本語
 - 全局搜索（不受当前季度限制）

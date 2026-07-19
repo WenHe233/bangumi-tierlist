@@ -305,11 +305,17 @@ footer a{color:var(--text-dim);}
 const DATA_URL = "https://unpkg.com/bangumi-data@0.3/dist/data.json";
 const SUBJECT_API = id => `https://api.bgm.tv/v0/subjects/${id}`;
 const PROXY = raw => raw ? ("https://images.weserv.nl/?url=" + raw.replace(/^https?:\/\//, "")) : null;
-const FALLBACK_COVER = "data:image/svg+xml;utf8," + encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="84" height="118" viewBox="0 0 84 118"><rect width="100%" height="100%" fill="#2b2f38"/><text x="50%" y="50%" fill="#9aa0a8" font-size="10" text-anchor="middle" dy=".3em">载入中</text></svg>'
+const coverPlaceholder = text => "data:image/svg+xml;utf8," + encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="84" height="118" viewBox="0 0 84 118"><rect width="100%" height="100%" fill="#2b2f38"/><text x="50%" y="50%" fill="#9aa0a8" font-size="10" text-anchor="middle" dy=".3em">${text}</text></svg>`
 );
+const LOADING_COVER = coverPlaceholder("载入中");
+const FAILED_COVER = coverPlaceholder("加载失败");
+const MISSING_COVER = coverPlaceholder("暂无封面");
 const COVER_CACHE_KEY = "tier_maker_cover_cache";
-const COVER_CONCURRENCY = 6;
+const COVER_CONCURRENCY = 4;
+const COVER_MAX_ATTEMPTS = 3;
+const COVER_REQUEST_TIMEOUT = 12000;
+const COVER_RETRY_BASE_DELAY = 800;
 const SEASON_TOLERANCE = 10; // 天，与参考 HTML 一致：边界番剧在相邻 cour 也可见
 const DEFAULT_TIERS = [
   {label:"S", color:"#e74c3c"},
@@ -369,7 +375,7 @@ function luminance(hex){
 function textColorOn(bg){ return luminance(bg) > 0.55 ? "#000" : "#fff"; }
 
 /* ============================== 封面解析（带缓存与并发控制） ============================== */
-const coverCache = {};      // { bangumiId: rawUrl | null }
+const coverCache = {};      // { bangumiId: rawUrl }，只缓存成功结果
 const coverWaiters = {};    // { bangumiId: [resolve, ...] }
 const coverQueue = [];
 let coverInFlight = 0;
@@ -377,7 +383,11 @@ let coverInFlight = 0;
 function loadCoverCache(){
   try{
     const j = JSON.parse(sessionStorage.getItem(COVER_CACHE_KEY) || "{}");
-    Object.assign(coverCache, j);
+    // 旧版本会持久化 null，导致刷新后永不重试；迁移时只保留有效 URL。
+    for (const [id, url] of Object.entries(j || {})){
+      if (typeof url === "string" && /^https?:\/\//.test(url)) coverCache[id] = url;
+    }
+    saveCoverCache();
   }catch(_){}
 }
 function saveCoverCache(){
@@ -385,41 +395,90 @@ function saveCoverCache(){
 }
 function resolveCoverUrl(bangumiId){
   return new Promise(resolve => {
-    if (bangumiId in coverCache){ resolve(coverCache[bangumiId]); return; }
+    if (!bangumiId){ resolve({url:null, missing:true}); return; }
+    if (typeof coverCache[bangumiId] === "string"){
+      resolve({url:coverCache[bangumiId], missing:false});
+      return;
+    }
     if (coverWaiters[bangumiId]){ coverWaiters[bangumiId].push(resolve); return; }
     coverWaiters[bangumiId] = [resolve];
     coverQueue.push(bangumiId);
     pumpCoverQueue();
   });
 }
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function fetchCoverUrl(bangumiId){
+  let lastError = null;
+  for (let attempt=1; attempt<=COVER_MAX_ATTEMPTS; attempt++){
+    const controller = new AbortController();
+    const timeout = setTimeout(()=>controller.abort(), COVER_REQUEST_TIMEOUT);
+    try{
+      const response = await fetch(SUBJECT_API(bangumiId), {
+        headers: { "Accept":"application/json" },
+        signal: controller.signal,
+      });
+      if (!response.ok){
+        const error = new Error(`HTTP ${response.status}`);
+        error.status = response.status;
+        const retryAfter = parseFloat(response.headers.get("Retry-After") || "");
+        error.retryAfter = Number.isFinite(retryAfter) ? retryAfter * 1000 : null;
+        throw error;
+      }
+      const data = await response.json();
+      const images = data && data.images;
+      const url = images && (images.common || images.large || images.medium || images.small);
+      return {url:url || null, missing:!url};
+    }catch(error){
+      lastError = error;
+      const retryable = error.name === "AbortError"
+        || !error.status || error.status === 429 || error.status >= 500;
+      if (!retryable || attempt === COVER_MAX_ATTEMPTS) break;
+      const delay = error.retryAfter != null
+        ? Math.min(error.retryAfter, 10000)
+        : COVER_RETRY_BASE_DELAY * (2 ** (attempt - 1));
+      await wait(delay);
+    }finally{
+      clearTimeout(timeout);
+    }
+  }
+  throw lastError || new Error("未知封面请求错误");
+}
 function pumpCoverQueue(){
   while (coverInFlight < COVER_CONCURRENCY && coverQueue.length){
     const id = coverQueue.shift();
     coverInFlight++;
-    fetch(SUBJECT_API(id), { headers: { "Accept":"application/json" } })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        let url = null;
-        if (d && d.images) url = d.images.common || d.images.large || d.images.medium || d.images.small || null;
-        coverCache[id] = url;
-        // 节流保存（避免每张图都写一次）
-        clearTimeout(saveCoverCache._h);
-        saveCoverCache._h = setTimeout(saveCoverCache, 500);
-        (coverWaiters[id] || []).forEach(fn => fn(url));
+    fetchCoverUrl(id)
+      .then(result => {
+        if (result.url){
+          coverCache[id] = result.url;
+          // 节流保存（避免每张图都写一次）
+          clearTimeout(saveCoverCache._h);
+          saveCoverCache._h = setTimeout(saveCoverCache, 500);
+        }
+        (coverWaiters[id] || []).forEach(fn => fn(result));
         delete coverWaiters[id];
       })
-      .catch(()=>{
-        coverCache[id] = null;
-        (coverWaiters[id] || []).forEach(fn => fn(null));
+      .catch(error => {
+        // 瞬时失败不写入缓存，后续重新渲染或刷新时仍可恢复。
+        console.warn(`封面请求失败（${id}）`, error);
+        (coverWaiters[id] || []).forEach(fn => fn({url:null, missing:false}));
         delete coverWaiters[id];
       })
       .finally(()=>{ coverInFlight--; pumpCoverQueue(); });
   }
 }
 function attachCover(imgEl, bangumiId){
-  resolveCoverUrl(bangumiId).then(raw => {
-    if (!raw){ imgEl.src = FALLBACK_COVER; return; }
-    imgEl.src = PROXY(raw);
+  resolveCoverUrl(bangumiId).then(result => {
+    if (!result.url){
+      imgEl.onerror = null;
+      imgEl.src = result.missing ? MISSING_COVER : FAILED_COVER;
+      return;
+    }
+    imgEl.onerror = () => {
+      imgEl.onerror = null;
+      imgEl.src = FAILED_COVER;
+    };
+    imgEl.src = PROXY(result.url);
   });
 }
 
@@ -843,9 +902,8 @@ function renderCard(id){
     card.title = title;
     const bgmId = extractBangumiId(item);
     card.innerHTML = `
-      <img class="card-cover" src="${FALLBACK_COVER}" crossorigin="anonymous"
-           referrerpolicy="no-referrer" alt=""
-           onerror="this.onerror=null;this.src='${FALLBACK_COVER}';">
+      <img class="card-cover" src="${LOADING_COVER}" crossorigin="anonymous"
+           referrerpolicy="no-referrer" alt="">
       <span class="card-title">${escapeHtml(title)}</span>
     `;
     attachCover(card.querySelector(".card-cover"), bgmId);

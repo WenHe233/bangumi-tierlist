@@ -544,7 +544,6 @@ function hydrateAllRefs(){
   for (const row of state.tierRows){
     for (const id of row.itemIds) ensureItemLoaded(id);
   }
-  for (const id of state.trayIds) ensureItemLoaded(id);
 }
 function buildYearSeasonIndex(items){
   const map = {};
@@ -585,6 +584,26 @@ function filterItems(items, year, season, typeFilter){
     if (!extractBangumiId(it)) return false;
     return true;
   });
+}
+
+function rebuildTrayIds(){
+  const placed = new Set();
+  for (const row of state.tierRows){
+    for (const id of row.itemIds) placed.add(id);
+  }
+  const uploads = Object.keys(state.itemsById)
+    .filter(id => state.itemsById[id]._kind === "upl" && !placed.has(id))
+    .sort((a,b) => state.itemsById[a].addedAt - state.itemsById[b].addedAt);
+  const currentBgm = [];
+  const filtered = filterItems(
+    state.rawItems, state.currentYear, state.currentSeason, state.typeFilter
+  );
+  for (const item of filtered){
+    const id = "bgm_" + extractBangumiId(item);
+    state.itemsById[id] = item;
+    if (!placed.has(id)) currentBgm.push(id);
+  }
+  state.trayIds = [...uploads, ...currentBgm];
 }
 
 /* ============================== 标题 / i18n ============================== */
@@ -756,7 +775,7 @@ async function addUploadedImage(rawBlob, srcMeta){
   try{ await idbPut(rec); }
   catch(e){ toast("入库失败：" + e.message); return; }
   state.itemsById[id] = { _kind:"upl", id, title, blobUrl: URL.createObjectURL(blob), addedAt: rec.addedAt };
-  state.trayIds.push(id);
+  rebuildTrayIds();
   renderTray(); saveCurrent();
 }
 
@@ -773,6 +792,7 @@ async function removeUploadedImage(id){
   }
   try{ URL.revokeObjectURL(state.itemsById[id].blobUrl); }catch(_){}
   delete state.itemsById[id];
+  rebuildTrayIds();
   renderAll(); saveCurrent();
 }
 
@@ -1064,13 +1084,7 @@ function loadCurrentSelection({keepUploads=true, keepTierStructure=true} = {}){
       row.itemIds = row.itemIds.filter(id => state.itemsById[id]);
     }
   }
-  // 重建 tray：上传项（按 addedAt）+ 新 bangumi 项；扣掉已在 tier 里的
-  const placed = new Set();
-  for (const row of state.tierRows) for (const id of row.itemIds) placed.add(id);
-  const uplIds = Object.keys(state.itemsById)
-    .filter(k => state.itemsById[k]._kind === "upl" && !placed.has(k))
-    .sort((a,b)=> state.itemsById[a].addedAt - state.itemsById[b].addedAt);
-  state.trayIds = [...uplIds, ...Array.from(newBgmIds).filter(id => !placed.has(id))];
+  rebuildTrayIds();
   renderAll(); saveSettings(); saveCurrent();
 }
 
@@ -1083,9 +1097,8 @@ function deleteRow(id){
   const idx = state.tierRows.findIndex(r => r.id === id);
   if (idx < 0) return;
   if (!confirm(`删除「${state.tierRows[idx].label}」行？里面的卡片会回到托盘。`)) return;
-  const row = state.tierRows[idx];
-  state.trayIds.push(...row.itemIds);
   state.tierRows.splice(idx, 1);
+  rebuildTrayIds();
   renderAll(); saveCurrent();
 }
 function moveRow(id, dir){
@@ -1112,7 +1125,7 @@ function initSortables(){
   });
   const tray = $("#trayCards");
   if (tray._sortable) try{ tray._sortable.destroy(); }catch(_){}
-  tray._sortable = Sortable.create(tray, opts);
+  tray._sortable = Sortable.create(tray, {...opts, sort:false});
 }
 function syncStateFromDOM(evt){
   // tier 行始终从 DOM 读
@@ -1121,29 +1134,8 @@ function syncStateFromDOM(evt){
     if (!cont) continue;
     row.itemIds = Array.from(cont.children).map(c => c.dataset.itemId);
   }
-  const trayEl = $("#trayCards");
-  const q = ($("#traySearch").value || "").trim();
-  if (!q){
-    // 无搜索：托盘 DOM 即真实状态
-    state.trayIds = Array.from(trayEl.children).map(c => c.dataset.itemId);
-  } else {
-    // 搜索激活：仅按拖拽事件局部更新 trayIds，搜索结果卡不应被误算入托盘
-    if (evt && evt.item){
-      const movedId = evt.item.dataset.itemId;
-      const fromTray = evt.from === trayEl;
-      const toTray = evt.to === trayEl;
-      if (toTray && !fromTray){
-        // 从 tier 行拖入托盘 → 持久化到 trayIds（搜索清空后仍可见）
-        if (!state.trayIds.includes(movedId)) state.trayIds.push(movedId);
-      } else if (fromTray && !toTray){
-        // 从托盘拖出到 tier 行 → 若曾在 trayIds 中则移除
-        const idx = state.trayIds.indexOf(movedId);
-        if (idx >= 0) state.trayIds.splice(idx, 1);
-      }
-    }
-    // 重新渲染托盘，按搜索结果显示（被刚拖入的卡若不匹配 q 会暂时隐去，但已在 trayIds 中保留）
-    applyTraySearch();
-  }
+  rebuildTrayIds();
+  applyTraySearch();
   saveCurrent();
 }
 
@@ -1270,16 +1262,10 @@ function applyShareSpec(spec){
   if (!state.tierRows.length){
     state.tierRows = DEFAULT_TIERS.map(t => ({ id:"r_"+uid(), label:t.label, color:t.color, itemIds:[] }));
   }
-  // tray：所有 bangumi 项 - 已放入 tier 的
-  const placed = new Set();
-  for (const row of state.tierRows) for (const id of row.itemIds) placed.add(id);
-  const newBgmIds = filtered.map(it => "bgm_" + extractBangumiId(it));
-  const uplIds = Object.keys(state.itemsById).filter(k => state.itemsById[k]._kind === "upl")
-    .sort((a,b)=> state.itemsById[a].addedAt - state.itemsById[b].addedAt);
-  state.trayIds = [...uplIds, ...newBgmIds.filter(id => !placed.has(id))];
   hydrateAllRefs(); // 补齐 tier 行里的跨 cour 项
   // 同步 UI
   refreshSelectors();
+  rebuildTrayIds();
   renderAll(); saveSettings(); saveCurrent();
   // 清掉 URL ?s=... 避免刷新再次套用旧分享
   history.replaceState(null, "", location.pathname);
@@ -1379,9 +1365,9 @@ async function importJSON(file){
   if (!state.tierRows.length){
     state.tierRows = DEFAULT_TIERS.map(t => ({ id:"r_"+uid(), label:t.label, color:t.color, itemIds:[] }));
   }
-  state.trayIds = normalizeItemIds(s.trayIds);
   hydrateAllRefs();
   refreshSelectors();
+  rebuildTrayIds();
   renderAll(); saveSettings(); saveCurrent();
   toast("导入成功");
 }
@@ -1472,10 +1458,10 @@ function loadSlotByName(name){
   if (!state.tierRows.length){
     state.tierRows = DEFAULT_TIERS.map(t => ({ id:"r_"+uid(), label:t.label, color:t.color, itemIds:[] }));
   }
-  state.trayIds = normalizeItemIds(d.trayIds);
   state.activeSlot = name;
   hydrateAllRefs();
   refreshSelectors();
+  rebuildTrayIds();
   renderAll(); saveSettings(); saveCurrent();
   toast(`已载入「${name}」`);
 }
@@ -1616,9 +1602,9 @@ async function init(){
       const filtered = filterItems(state.rawItems, state.currentYear, state.currentSeason, state.typeFilter);
       for (const it of filtered) state.itemsById["bgm_" + extractBangumiId(it)] = it;
       state.tierRows = normalizeTierRows(cur.tierRows, true);
-      state.trayIds = normalizeItemIds(cur.trayIds);
       hydrateAllRefs();
       refreshSelectors();
+      rebuildTrayIds();
       renderAll();
     } else {
       // 首次启动：用当前年份 + 当前季度（若有数据），自动载入

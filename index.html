@@ -373,6 +373,24 @@ function luminance(hex){
   return 0.2126*r + 0.7152*g + 0.0722*b;
 }
 function textColorOn(bg){ return luminance(bg) > 0.55 ? "#000" : "#fff"; }
+function normalizeColor(value, fallback="#7f8c8d"){
+  return /^#[0-9a-f]{6}$/i.test(value || "") ? value.toLowerCase() : fallback;
+}
+function isValidItemId(id){
+  return typeof id === "string" && /^(?:bgm_\d+|upl_[a-z0-9]+|phantom_\d+)$/i.test(id);
+}
+function normalizeItemIds(ids){
+  return Array.isArray(ids) ? [...new Set(ids.filter(isValidItemId))] : [];
+}
+function normalizeTierRows(rows, regenerateIds=false){
+  if (!Array.isArray(rows)) return [];
+  return rows.filter(row => row && typeof row === "object").map(row => ({
+    id: regenerateIds || !/^r_[a-z0-9]+$/i.test(row.id || "") ? "r_"+uid() : row.id,
+    label: typeof row.label === "string" ? row.label.slice(0, 8) : "新",
+    color: normalizeColor(row.color),
+    itemIds: normalizeItemIds(row.itemIds),
+  }));
+}
 
 /* ============================== 封面解析（带缓存与并发控制） ============================== */
 const coverCache = {};      // { bangumiId: rawUrl }，只缓存成功结果
@@ -489,13 +507,15 @@ async function fetchBangumiData(){
     const cached = sessionStorage.getItem("bangumi_data_cache");
     if (cached){
       const j = JSON.parse(cached);
-      if (j && j.items) return j.items;
+      if (j && Array.isArray(j.items)) return j.items;
     }
   }catch(_){}
   setLoading(15);
   const res = await fetch(DATA_URL);
+  if (!res.ok) throw new Error("HTTP " + res.status);
   setLoading(60);
   const j = await res.json();
+  if (!j || !Array.isArray(j.items)) throw new Error("数据格式无效");
   try{ sessionStorage.setItem("bangumi_data_cache", JSON.stringify(j)); }catch(_){}
   setLoading(80);
   return j.items;
@@ -823,6 +843,7 @@ function renderTierBoard(){
   initSortables();
 }
 function renderRow(row){
+  row.color = normalizeColor(row.color);
   const el = document.createElement("div");
   el.className = "tier-row";
   el.dataset.rowId = row.id;
@@ -1187,9 +1208,11 @@ function buildShareURL(){
       if (id.startsWith("upl_")) return "*";
       return "";
     }).filter(Boolean).join(".");
-    return encodeURIComponent(row.label) + ":" + row.color.replace("#","") + "~" + ids;
+    const encodedLabel = encodeURIComponent(String(row.label)).replace(/~/g, "%7E");
+    return encodedLabel + ":" + normalizeColor(row.color).slice(1) + "~" + ids;
   }).join("|");
-  parts.push("r=" + rowParts);
+  // 整个值再编码一层，避免 URLSearchParams 提前解码层级名中的 |、:、~、% 等分隔字符。
+  parts.push("r=" + encodeURIComponent(rowParts));
   // 未排名上传隐去；未排名 bangumi 不带（重建时自动从季度数据填）
   const url = location.origin + location.pathname + "?" + parts.join("&");
   return url;
@@ -1215,9 +1238,12 @@ function parseShareURL(){
     const colon = part.indexOf(":");
     const tilde = part.indexOf("~");
     if (colon < 0 || tilde < 0) continue;
-    const label = decodeURIComponent(part.slice(0, colon));
-    const color = "#" + part.slice(colon+1, tilde);
-    const ids = part.slice(tilde+1).split(".").filter(Boolean);
+    let label = part.slice(0, colon);
+    try{ label = decodeURIComponent(label); }catch(_){}
+    label = label.slice(0, 8);
+    const color = normalizeColor("#" + part.slice(colon+1, tilde));
+    const ids = part.slice(tilde+1).split(".")
+      .filter(tok => tok === "*" || /^\d+$/.test(tok));
     spec.rows.push({ label, color, ids });
   }
   return spec;
@@ -1327,6 +1353,7 @@ async function importJSON(file){
   // 先把上传写回 IndexedDB / state.itemsById
   if (Array.isArray(payload.uploads)){
     for (const u of payload.uploads){
+      if (!u || !/^upl_[a-z0-9]+$/i.test(u.id || "")) continue;
       const blob = dataUrlToBlob(u.base64);
       if (!blob) continue;
       try{
@@ -1348,8 +1375,11 @@ async function importJSON(file){
   // 重建 itemsById 里的 bangumi 项
   const filtered = filterItems(state.rawItems, state.currentYear, state.currentSeason, state.typeFilter);
   for (const it of filtered) state.itemsById["bgm_" + extractBangumiId(it)] = it;
-  state.tierRows = (s.tierRows || []).map(r => ({ id:"r_"+uid(), label:r.label, color:r.color, itemIds: r.itemIds.slice() }));
-  state.trayIds = (s.trayIds || []).slice();
+  state.tierRows = normalizeTierRows(s.tierRows, true);
+  if (!state.tierRows.length){
+    state.tierRows = DEFAULT_TIERS.map(t => ({ id:"r_"+uid(), label:t.label, color:t.color, itemIds:[] }));
+  }
+  state.trayIds = normalizeItemIds(s.trayIds);
   hydrateAllRefs();
   refreshSelectors();
   renderAll(); saveSettings(); saveCurrent();
@@ -1438,8 +1468,11 @@ function loadSlotByName(name){
   // 重建 bangumi 项
   const filtered = filterItems(state.rawItems, state.currentYear, state.currentSeason, state.typeFilter);
   for (const it of filtered) state.itemsById["bgm_" + extractBangumiId(it)] = it;
-  state.tierRows = (d.tierRows || []).map(r => ({ id:"r_"+uid(), label:r.label, color:r.color, itemIds: r.itemIds.slice() }));
-  state.trayIds = (d.trayIds || []).slice();
+  state.tierRows = normalizeTierRows(d.tierRows, true);
+  if (!state.tierRows.length){
+    state.tierRows = DEFAULT_TIERS.map(t => ({ id:"r_"+uid(), label:t.label, color:t.color, itemIds:[] }));
+  }
+  state.trayIds = normalizeItemIds(d.trayIds);
   state.activeSlot = name;
   hydrateAllRefs();
   refreshSelectors();
@@ -1582,8 +1615,8 @@ async function init(){
       // 重建 bangumi itemsById
       const filtered = filterItems(state.rawItems, state.currentYear, state.currentSeason, state.typeFilter);
       for (const it of filtered) state.itemsById["bgm_" + extractBangumiId(it)] = it;
-      state.tierRows = cur.tierRows;
-      state.trayIds = cur.trayIds || [];
+      state.tierRows = normalizeTierRows(cur.tierRows, true);
+      state.trayIds = normalizeItemIds(cur.trayIds);
       hydrateAllRefs();
       refreshSelectors();
       renderAll();

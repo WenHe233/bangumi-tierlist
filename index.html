@@ -79,9 +79,13 @@ h1 .sub{color:var(--text-dim);font-size:.7em;margin-left:8px;font-weight:normal;
   background:rgba(0,0,0,.18);align-content:flex-start;}
 .tier-cards:empty::before{content:"拖动卡片到这里";color:var(--text-dim);font-size:.8em;
   align-self:center;padding-left:8px;pointer-events:none;}
+#tierActions{display:grid;grid-template-columns:1fr auto;gap:6px;margin-top:6px;}
 #btnAddRow{display:block;width:100%;background:transparent;border:1px dashed var(--border);
-  color:var(--text-dim);border-radius:4px;padding:6px;cursor:pointer;margin-top:6px;}
+  color:var(--text-dim);border-radius:4px;padding:6px;cursor:pointer;}
 #btnAddRow:hover{color:var(--text);border-color:var(--accent);}
+#btnResetBoard{background:transparent;color:var(--danger);border:1px solid rgba(231,76,60,.45);
+  border-radius:4px;padding:6px 12px;cursor:pointer;}
+#btnResetBoard:hover{background:rgba(231,76,60,.12);border-color:var(--danger);}
 
 #trayPanel{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:10px 12px;}
 
@@ -196,6 +200,8 @@ body.exporting .card-title{font-size:.56em;line-height:1.05;}
 #modalBox button{background:var(--panel-2);color:var(--text);border:1px solid var(--border);
   padding:5px 12px;border-radius:4px;cursor:pointer;}
 #modalBox button.primary{background:var(--accent);color:#000;border-color:var(--accent);}
+#modalBox button.danger{background:rgba(231,76,60,.15);color:#ff8f84;border-color:var(--danger);}
+#modalBox button.danger:hover{background:rgba(231,76,60,.28);}
 #modalBox .shareUrlBox{word-break:break-all;background:var(--panel-2);padding:8px;
   border-radius:4px;border:1px solid var(--border);max-height:160px;overflow:auto;
   font-family:monospace;font-size:.85em;margin-bottom:12px;}
@@ -278,7 +284,10 @@ footer a{color:var(--text-dim);}
 <div id="mainArea">
   <div id="tierColumn">
     <main id="tierBoard"></main>
-    <button id="btnAddRow">+ 添加层级</button>
+    <div id="tierActions">
+      <button id="btnAddRow">+ 添加层级</button>
+      <button id="btnResetBoard">重置列表</button>
+    </div>
   </div>
   <section id="trayPanel">
     <div id="trayHeader">
@@ -1131,6 +1140,36 @@ function addRow(){
   state.tierRows.push({ id:"r_"+uid(), label:"新", color:"#7f8c8d", itemIds:[] });
   renderTierBoard(); saveCurrent();
 }
+function resetCurrentList(){
+  state.tierRows = DEFAULT_TIERS.map(t => ({
+    id:"r_"+uid(), label:t.label, color:t.color, itemIds:[],
+  }));
+  state.activeSlot = "";
+  $("#slotSelect").value = "";
+  $("#traySearch").value = "";
+  clearTouchCardSelection();
+  rebuildTrayIds();
+  renderAll();
+  saveSettings();
+  saveCurrent();
+  toast("当前列表已重置");
+}
+function promptResetCurrentList(){
+  showModal(`
+    <h3>重置当前列表</h3>
+    <p class="hint">所有排名和自定义层级将被清空，并恢复默认 S–F 层级。</p>
+    <p class="hint">命名存档和上传图片不会删除。</p>
+    <div class="actions">
+      <button id="modalCancel">取消</button>
+      <button id="modalOk" class="danger">确认重置</button>
+    </div>
+  `);
+  $("#modalCancel").onclick = hideModal;
+  $("#modalOk").onclick = () => {
+    hideModal();
+    resetCurrentList();
+  };
+}
 function deleteRow(id){
   const idx = state.tierRows.findIndex(r => r.id === id);
   if (idx < 0) return;
@@ -1548,6 +1587,7 @@ function bindEvents(){
   });
   // 行操作
   $("#btnAddRow").addEventListener("click", addRow);
+  $("#btnResetBoard").addEventListener("click", promptResetCurrentList);
   // 托盘搜索
   let _q;
   $("#traySearch").addEventListener("input", () => {

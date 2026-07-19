@@ -110,8 +110,10 @@ body.comments-hidden .tier-annotations{display:none;}
 .markdown-body > :last-child{margin-bottom:0;}
 .markdown-body p,.markdown-body ul{margin:.35em 0;}
 .markdown-body ul{padding-left:1.4em;}
-.markdown-body h4,.markdown-body h5,.markdown-body h6{margin:.45em 0 .2em;line-height:1.25;}
-.markdown-body h4{font-size:1.05em}.markdown-body h5{font-size:1em}.markdown-body h6{font-size:.95em}
+.markdown-body h4,.markdown-body h5,.markdown-body h6{display:block;margin:.6em 0 .25em;color:inherit;
+  font-weight:700;line-height:1.25;overflow:visible;}
+.markdown-body h4{font-size:1.4em}.markdown-body h5{font-size:1.2em}.markdown-body h6{font-size:1.05em}
+.markdown-body h4:first-child,.markdown-body h5:first-child,.markdown-body h6:first-child{margin-top:0;}
 .markdown-body code{background:rgba(0,0,0,.3);padding:.08em .3em;border-radius:3px;}
 .markdown-body a{color:var(--accent);}
 #tierActions{display:grid;grid-template-columns:1fr auto;gap:6px;margin-top:6px;}
@@ -196,6 +198,15 @@ body.exporting .card-comment-action:not(.has-comment){display:none !important;}
 body.exporting .card-comment-action.has-comment{display:block !important;pointer-events:none;}
 body.exporting .tier-annotations{display:block !important;}
 body.exporting .comment-body.is-collapsed{display:block;-webkit-line-clamp:unset;overflow:visible;}
+body.exporting .markdown-body{overflow:visible;}
+body.exporting .markdown-body h4,body.exporting .markdown-body h5,body.exporting .markdown-body h6{
+  display:block!important;margin:.6em 0 .25em!important;color:inherit!important;font-family:inherit!important;
+  font-weight:700!important;line-height:1.25!important;overflow:visible!important;break-inside:avoid;}
+body.exporting .markdown-body h4{font-size:1.4em!important}
+body.exporting .markdown-body h5{font-size:1.2em!important}
+body.exporting .markdown-body h6{font-size:1.05em!important}
+body.exporting .markdown-body h4:first-child,body.exporting .markdown-body h5:first-child,
+body.exporting .markdown-body h6:first-child{margin-top:0!important;}
 body.exporting .comment-expand{display:none !important;}
 body.exporting .tier-label-text{font-size:1.15em;}
 body.exporting .card{border-radius:3px;}
@@ -494,7 +505,8 @@ function renderMarkdown(markdown){
     return escapeHtml(source).replace(/\n/g, "<br>");
   }
   html = html.replace(/<(\/?)h([1-6])(?=[\s>])/gi, (_match, slash, level) => {
-    const compactLevel = Number(level) <= 2 ? 4 : Number(level) <= 4 ? 5 : 6;
+    const originalLevel = Number(level);
+    const compactLevel = originalLevel === 1 ? 4 : originalLevel <= 3 ? 5 : 6;
     return `<${slash}h${compactLevel}`;
   });
   const clean = DOMPurify.sanitize(html, {

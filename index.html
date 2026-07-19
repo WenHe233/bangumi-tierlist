@@ -151,16 +151,21 @@ body.show-titles .card-title{display:block;}
 
 /* 导出 PNG 时临时套用：隐藏编辑控件、收紧圆角、缩小标题字号（保持多行换行） */
 body.exporting .tier-row-tools{display:none !important;}
+body.exporting .card-action{display:none !important;}
 body.exporting .tier-label-text{font-size:1.15em;}
 body.exporting .card{border-radius:3px;}
 body.exporting .tier-row{border-radius:4px;}
 body.exporting .card-title{font-size:.56em;line-height:1.05;}
 .card-badge{position:absolute;top:2px;right:2px;background:var(--accent-2);color:#000;
   font-size:.6em;font-weight:bold;padding:1px 4px;border-radius:2px;line-height:1;pointer-events:none;}
-.card-del{position:absolute;top:2px;left:2px;width:16px;height:16px;border:none;
+.card-action{position:absolute;top:2px;left:2px;width:18px;height:18px;border:none;
   background:rgba(0,0,0,.6);color:#fff;border-radius:50%;cursor:pointer;font-size:11px;
-  line-height:14px;padding:0;display:none;}
-.card.is-upload:hover .card-del{display:block;}
+  line-height:16px;padding:0;display:none;z-index:2;}
+.card-action:hover,.card-action:focus{background:rgba(231,76,60,.9);outline:none;}
+.card.has-card-action:focus-within .card-action,.card.touch-selected .card-action{display:block;}
+@media (hover:hover) and (pointer:fine){
+  .card.has-card-action:hover .card-action{display:block;}
+}
 
 /* drag overlay */
 #dropOverlay{position:fixed;inset:0;background:rgba(0,0,0,.7);color:#fff;
@@ -902,7 +907,7 @@ function renderRow(row){
   cards.className = "tier-cards";
   cards.dataset.rowId = row.id;
   for (const id of row.itemIds){
-    cards.appendChild(renderCard(id));
+    cards.appendChild(renderCard(id, {inTier:true}));
   }
   el.appendChild(label);
   el.appendChild(cards);
@@ -912,7 +917,40 @@ function renderTray(){
   // 实际渲染逻辑全部交给 applyTraySearch（它能区分无搜索 / 全局搜索两种模式）
   applyTraySearch();
 }
-function renderCard(id){
+function clearTouchCardSelection(){
+  $$(".card.touch-selected").forEach(card => card.classList.remove("touch-selected"));
+}
+function usesTouchCardActions(){
+  return !!(window.matchMedia
+    && window.matchMedia("(hover: none), (pointer: coarse)").matches);
+}
+function addCardAction(card, title, handler){
+  card.classList.add("has-card-action");
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "card-action";
+  button.title = title;
+  button.setAttribute("aria-label", title);
+  button.textContent = "×";
+  button.addEventListener("pointerdown", e => e.stopPropagation());
+  button.addEventListener("click", e => {
+    e.stopPropagation();
+    clearTouchCardSelection();
+    handler();
+  });
+  card.appendChild(button);
+}
+function bindTouchCardSelection(card){
+  card.addEventListener("click", e => {
+    if (!usesTouchCardActions() || e.target.closest(".card-action")) return;
+    const wasSelected = card.classList.contains("touch-selected");
+    clearTouchCardSelection();
+    if (!wasSelected && card.classList.contains("has-card-action")){
+      card.classList.add("touch-selected");
+    }
+  });
+}
+function renderCard(id, {inTier=false} = {}){
   const item = state.itemsById[id];
   const card = document.createElement("div");
   card.className = "card";
@@ -921,6 +959,8 @@ function renderCard(id){
     card.classList.add(id.startsWith("phantom_") ? "is-phantom" : "is-missing");
     card.dataset.kind = id.startsWith("phantom_") ? "phantom" : "missing";
     card.title = id.startsWith("phantom_") ? "[本地图]（原作者本地图片，仅占位）" : "已下架/未在当前数据集";
+    if (inTier) addCardAction(card, "移回未分级", () => returnTierItem(id));
+    bindTouchCardSelection(card);
     return card;
   }
   if (item._kind === "upl"){
@@ -931,12 +971,8 @@ function renderCard(id){
       <img class="card-cover" src="${item.blobUrl}" alt="">
       <span class="card-title">${escapeHtml(item.title || "")}</span>
       <span class="card-badge">U</span>
-      <button class="card-del" title="删除此上传">×</button>
     `;
-    card.querySelector(".card-del").addEventListener("click", e => {
-      e.stopPropagation();
-      removeUploadedImage(id);
-    });
+    addCardAction(card, "永久删除此上传", () => removeUploadedImage(id));
   } else {
     card.dataset.kind = "bgm";
     const title = getTitle(item, state.lang);
@@ -948,7 +984,9 @@ function renderCard(id){
       <span class="card-title">${escapeHtml(title)}</span>
     `;
     attachCover(card.querySelector(".card-cover"), bgmId);
+    if (inTier) addCardAction(card, "移回未分级", () => returnTierItem(id));
   }
+  bindTouchCardSelection(card);
   return card;
 }
 function escapeHtml(s){
@@ -1101,6 +1139,22 @@ function deleteRow(id){
   rebuildTrayIds();
   renderAll(); saveCurrent();
 }
+function returnTierItem(id){
+  let removed = false;
+  for (const row of state.tierRows){
+    const index = row.itemIds.indexOf(id);
+    if (index >= 0){
+      row.itemIds.splice(index, 1);
+      removed = true;
+    }
+  }
+  if (!removed) return;
+  rebuildTrayIds();
+  const visibleInTray = state.trayIds.includes(id);
+  renderAll();
+  saveCurrent();
+  toast(visibleInTray ? "已移回未分级" : "已移出当前 Tier");
+}
 function moveRow(id, dir){
   const idx = state.tierRows.findIndex(r => r.id === id);
   if (idx < 0) return;
@@ -1117,6 +1171,8 @@ function initSortables(){
   const opts = {
     group:{ name:"tiermaker", pull:true, put:true },
     animation:120, delay:150, delayOnTouchOnly:true, fallbackOnBody:true,
+    filter:".card-action", preventOnFilter:false,
+    onStart: clearTouchCardSelection,
     onEnd: (evt) => syncStateFromDOM(evt),
   };
   $$(".tier-cards").forEach(el => {
@@ -1135,7 +1191,7 @@ function syncStateFromDOM(evt){
     row.itemIds = Array.from(cont.children).map(c => c.dataset.itemId);
   }
   rebuildTrayIds();
-  applyTraySearch();
+  renderAll();
   saveCurrent();
 }
 
@@ -1468,6 +1524,9 @@ function loadSlotByName(name){
 
 /* ============================== 事件绑定 ============================== */
 function bindEvents(){
+  document.addEventListener("click", e => {
+    if (!e.target.closest || !e.target.closest(".card")) clearTouchCardSelection();
+  });
   // 全局控制
   $("#langSelect").addEventListener("change", e => {
     state.lang = e.target.value; saveSettings(); renderAll();

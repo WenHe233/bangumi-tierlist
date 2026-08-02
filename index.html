@@ -210,6 +210,8 @@ body.exporting .markdown-body h4:first-child,body.exporting .markdown-body h5:fi
 body.exporting .markdown-body h6:first-child{margin-top:0!important;}
 body.exporting .comment-expand{display:none !important;}
 body.exporting .tier-label-text{font-size:1.15em;}
+body.exporting .tier-label-export-text{display:block;width:max-content;max-width:none;
+  white-space:nowrap;overflow:visible;}
 body.exporting .card{border-radius:3px;}
 body.exporting .tier-row{border-radius:4px;}
 body.exporting .card-title{font-size:.56em;line-height:1.05;}
@@ -1671,6 +1673,15 @@ async function renderTierBoardCanvas(){
   try{
     return await html2canvas($("#tierBoard"), {
       backgroundColor:"#1b1f27", useCORS:true, allowTaint:false, scale:2, logging:false,
+      onclone: clonedDocument => {
+        // html2canvas 对 input value 的居中渲染不稳定，截图克隆中改用普通文本节点。
+        clonedDocument.querySelectorAll(".tier-label-text").forEach(input => {
+          const text = clonedDocument.createElement("div");
+          text.className = "tier-label-text tier-label-export-text";
+          text.textContent = input.value;
+          input.replaceWith(text);
+        });
+      },
     });
   } finally {
     document.body.classList.remove("exporting");

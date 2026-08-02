@@ -196,7 +196,8 @@ body.exporting .card-action{display:none !important;}
 body.exporting .tier-note-action{display:none !important;}
 body.exporting .card-comment-action:not(.has-comment){display:none !important;}
 body.exporting .card-comment-action.has-comment{display:block !important;pointer-events:none;}
-body.exporting .tier-annotations{display:block !important;}
+body.exporting:not(.comments-hidden) .tier-annotations{display:block !important;}
+body.exporting.comments-hidden .tier-annotations{display:none !important;}
 body.exporting .comment-body.is-collapsed{display:block;-webkit-line-clamp:unset;overflow:visible;}
 body.exporting .markdown-body{overflow:visible;}
 body.exporting .markdown-body h4,body.exporting .markdown-body h5,body.exporting .markdown-body h6{

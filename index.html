@@ -359,6 +359,7 @@ footer a{color:var(--text-dim);}
   <div class="group">
     <span class="group-title">存档</span>
     <select id="slotSelect"><option value="">— 未选择 —</option></select>
+    <button id="btnNewSlot" disabled>新建</button>
     <button id="btnSaveAs">另存为</button>
     <button id="btnSave">保存</button>
     <button id="btnDeleteSlot" class="danger">删除</button>
@@ -781,9 +782,9 @@ function filterItems(items, year, season, typeFilter){
   });
 }
 
-function rebuildTrayIds(){
+function buildTrayIds(tierRows){
   const placed = new Set();
-  for (const row of state.tierRows){
+  for (const row of tierRows){
     for (const id of row.itemIds) placed.add(id);
   }
   const uploads = Object.keys(state.itemsById)
@@ -798,7 +799,10 @@ function rebuildTrayIds(){
     state.itemsById[id] = item;
     if (!placed.has(id)) currentBgm.push(id);
   }
-  state.trayIds = [...uploads, ...currentBgm];
+  return [...uploads, ...currentBgm];
+}
+function rebuildTrayIds(){
+  state.trayIds = buildTrayIds(state.tierRows);
 }
 
 /* ============================== 标题 / i18n ============================== */
@@ -877,7 +881,7 @@ function listSlots(){
   try{ return JSON.parse(localStorage.getItem(LS_SLOTS)) || {}; }catch(_){ return {}; }
 }
 function saveSlot(name, data){
-  const slots = listSlots(); slots[name] = data;
+  const slots = {...listSlots(), [name]:data};
   try{ localStorage.setItem(LS_SLOTS, JSON.stringify(slots)); }
   catch(e){ toast("存档失败（可能配额已满）：" + e.message); return false; }
   return true;
@@ -1986,6 +1990,48 @@ function showModal(html){
 }
 function hideModal(){ $("#modalOverlay").hidden = true; }
 
+function promptNewSlot(){
+  showModal(`
+    <h3>新建存档</h3>
+    <p class="hint">沿用当前年份、季度和类型筛选，创建空白的 S–F 榜单，保留上传图片。</p>
+    <p class="hint">新建后会切换到新存档。当前修改若需保留，请先取消并保存。</p>
+    <input type="text" id="modalInput" aria-label="存档名称" placeholder="输入新存档名称" maxlength="40">
+    <div class="actions">
+      <button id="modalCancel">取消</button>
+      <button id="modalOk" class="primary">新建</button>
+    </div>
+  `);
+  const input = $("#modalInput");
+  input.focus();
+  $("#modalCancel").onclick = hideModal;
+  $("#modalOk").onclick = () => {
+    const name = input.value.trim();
+    if (!name){ toast("请输入存档名称"); input.focus(); return; }
+    if (Object.hasOwn(listSlots(), name)){
+      toast("存档名称已存在，请换个名字");
+      input.focus();
+      return;
+    }
+    const tierRows = DEFAULT_TIERS.map(t => ({
+      id:"r_"+uid(), label:t.label, color:t.color, itemIds:[], note:"",
+    }));
+    const data = {
+      year:state.currentYear, season:state.currentSeason,
+      typeFilter:state.typeFilter, tierRows, trayIds:buildTrayIds(tierRows),
+      itemComments:{}, savedAt:Date.now(),
+    };
+    if (!saveSlot(name, data)) return;
+    closeCommentEditor({rerender:false});
+    expandedComments.clear();
+    $("#traySearch").value = "";
+    hideModal();
+    loadSlotByName(name);
+    refreshSlotList(name);
+    toast(`已新建「${name}」`);
+  };
+  input.addEventListener("keydown", e => { if (e.key === "Enter") $("#modalOk").click(); });
+}
+
 function promptSaveAs(){
   showModal(`
     <h3>另存为</h3>
@@ -2136,6 +2182,7 @@ function bindEvents(){
     clearTimeout(_q); _q = setTimeout(applyTraySearch, 80);
   });
   // 存档
+  $("#btnNewSlot").addEventListener("click", promptNewSlot);
   $("#slotSelect").addEventListener("change", e => {
     const name = e.target.value;
     if (name) loadSlotByName(name);
@@ -2260,6 +2307,7 @@ async function init(){
   }
   setLoading(100);
   state.bootDone = true;
+  $("#btnNewSlot").disabled = false;
 }
 
 window.addEventListener("DOMContentLoaded", init);

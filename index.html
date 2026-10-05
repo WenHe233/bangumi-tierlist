@@ -217,7 +217,7 @@ body.exporting .tier-label-export-text{display:block;width:max-content;max-width
   white-space:nowrap;overflow:visible;}
 body.exporting .card{border-radius:3px;}
 body.exporting .tier-row{border-radius:4px;}
-body.exporting .card-title{font-size:.56em;}
+body.exporting .card-title{font-size:.56em;line-height:1.2;}
 .export-watermark{padding:4px 6px 2px;text-align:right;font-size:12px;line-height:1.4;
   color:rgba(255,255,255,.5);overflow-wrap:anywhere;}
 .card-badge{position:absolute;right:2px;bottom:2px;background:var(--accent-2);color:#000;
@@ -1684,6 +1684,11 @@ async function renderTierBoardCanvas(){
     return await html2canvas($("#tierBoard"), {
       backgroundColor:"#1b1f27", useCORS:true, allowTaint:false, scale:2, logging:false,
       onclone: clonedDocument => {
+        // 按导出字号固定像素行高，让截图中的换行和背景高度使用同一组尺寸。
+        clonedDocument.querySelectorAll(".card-title").forEach(title => {
+          const fontSize = parseFloat(clonedDocument.defaultView.getComputedStyle(title).fontSize);
+          title.style.setProperty("line-height", `${fontSize * 1.2}px`, "important");
+        });
         // html2canvas 对 input value 的居中渲染不稳定，截图克隆中改用普通文本节点。
         clonedDocument.querySelectorAll(".tier-label-text").forEach(input => {
           const text = clonedDocument.createElement("div");

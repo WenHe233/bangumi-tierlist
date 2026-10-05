@@ -64,6 +64,7 @@ h1 .sub{color:var(--text-dim);font-size:.7em;margin-left:8px;font-weight:normal;
 #typeFilter label{display:flex;align-items:center;gap:3px;cursor:pointer;font-size:.9em;}
 #uploadUrlInput{flex:1;min-width:160px;}
 #uploadHint{color:var(--text-dim);font-size:.78em;width:100%;}
+#watermarkOption{display:flex;align-items:center;gap:4px;width:100%;font-size:.9em;cursor:pointer;}
 
 #tierBoard{background:var(--panel);border:1px solid var(--border);border-radius:6px;
   padding:6px;margin-bottom:14px;}
@@ -185,9 +186,11 @@ body.comments-hidden .tier-annotations{display:none;}
 .card.is-phantom .card-cover{display:none;}
 .card.hidden{display:none;}
 .card-cover{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;}
-.card-title{position:absolute;left:0;right:0;bottom:0;padding:2px 4px;
-  background:linear-gradient(transparent,rgba(0,0,0,.85));color:#fff;font-size:.72em;
-  line-height:1.15;max-height:60%;overflow:hidden;display:none;pointer-events:none;}
+.card-title{position:absolute;left:0;right:0;bottom:0;padding:10px 4px 3px;
+  background:linear-gradient(transparent,rgba(0,0,0,.72) 8px,rgba(0,0,0,.85));
+  color:#fff;font-size:.72em;text-shadow:0 1px 2px rgba(0,0,0,.8);
+  line-height:1.25;max-height:calc(100% - 22px);overflow-wrap:anywhere;
+  overflow:hidden;display:none;pointer-events:none;}
 body.show-titles .card-title{display:block;}
 
 /* 导出 PNG 时临时套用：隐藏编辑控件、收紧圆角、缩小标题字号（保持多行换行） */
@@ -214,7 +217,9 @@ body.exporting .tier-label-export-text{display:block;width:max-content;max-width
   white-space:nowrap;overflow:visible;}
 body.exporting .card{border-radius:3px;}
 body.exporting .tier-row{border-radius:4px;}
-body.exporting .card-title{font-size:.56em;line-height:1.05;}
+body.exporting .card-title{font-size:.56em;}
+.export-watermark{padding:4px 6px 2px;text-align:right;font-size:12px;line-height:1.4;
+  color:rgba(255,255,255,.5);overflow-wrap:anywhere;}
 .card-badge{position:absolute;right:2px;bottom:2px;background:var(--accent-2);color:#000;
   font-size:.6em;font-weight:bold;padding:1px 4px;border-radius:2px;line-height:1;pointer-events:none;}
 .card-action,.card-comment-action{position:absolute;top:2px;width:18px;height:18px;border:none;
@@ -375,6 +380,7 @@ footer a{color:var(--text-dim);}
     <button id="btnExportJSON">导出 JSON</button>
     <button id="btnImportJSON">导入 JSON</button>
     <input type="file" id="jsonFileInput" accept="application/json,.json" hidden>
+    <label id="watermarkOption"><input type="checkbox" id="exportWatermark">导出 / 复制图片时添加水印</label>
   </div>
 </section>
 
@@ -463,6 +469,7 @@ const state = {
   lang: "zh-Hans",
   cardMode: "cover-title",// or "cover-only"
   commentsVisible: true,
+  exportWatermark: false,
   activeSlot: "",
   pendingShareSpec: null, // 解析自 URL 但尚未应用
   uploadsDB: null,
@@ -834,6 +841,7 @@ function loadSettings(){
     if (s.lang) state.lang = s.lang;
     if (s.cardMode) state.cardMode = s.cardMode;
     if (typeof s.commentsVisible === "boolean") state.commentsVisible = s.commentsVisible;
+    if (typeof s.exportWatermark === "boolean") state.exportWatermark = s.exportWatermark;
     if (s.typeFilter) state.typeFilter = Object.assign({}, state.typeFilter, s.typeFilter);
     if (s.currentYear) state.currentYear = s.currentYear;
     if (s.currentSeason !== undefined) state.currentSeason = s.currentSeason;
@@ -846,6 +854,7 @@ function saveSettings(){
       lang: state.lang, cardMode: state.cardMode, typeFilter: state.typeFilter,
       currentYear: state.currentYear, currentSeason: state.currentSeason,
       activeSlot: state.activeSlot, commentsVisible: state.commentsVisible,
+      exportWatermark: state.exportWatermark,
     }));
   }catch(e){ toast("设置保存失败：" + e.message); }
 }
@@ -1667,6 +1676,7 @@ function syncStateFromDOM(evt){
 
 /* ============================== 导出 / 分享 ============================== */
 async function renderTierBoardCanvas(){
+  const watermarkText = state.exportWatermark ? location.hostname : "";
   document.body.classList.add("exporting");
   // 等一帧让浏览器应用 body.exporting 的样式后再截图
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -1681,6 +1691,12 @@ async function renderTierBoardCanvas(){
           text.textContent = input.value;
           input.replaceWith(text);
         });
+        if (watermarkText){
+          const watermark = clonedDocument.createElement("div");
+          watermark.className = "export-watermark";
+          watermark.textContent = watermarkText;
+          clonedDocument.querySelector("#tierBoard").appendChild(watermark);
+        }
       },
     });
   } finally {
@@ -2140,6 +2156,11 @@ function bindEvents(){
     if (e.key === "Enter"){ ingestUrl(e.target.value); e.target.value = ""; }
   });
   // 导出
+  $("#exportWatermark").checked = state.exportWatermark;
+  $("#exportWatermark").addEventListener("change", e => {
+    state.exportWatermark = e.target.checked;
+    saveSettings();
+  });
   $("#btnExportPNG").addEventListener("click", exportPNG);
   $("#btnCopyPNG").addEventListener("click", copyPNG);
   $("#btnShareURL").addEventListener("click", () => {

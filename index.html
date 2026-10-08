@@ -438,7 +438,9 @@ const COVER_CONCURRENCY = 4;
 const COVER_MAX_ATTEMPTS = 3;
 const COVER_REQUEST_TIMEOUT = 12000;
 const COVER_RETRY_BASE_DELAY = 800;
-const SEASON_TOLERANCE = 10; // 天，与参考 HTML 一致：边界番剧在相邻 cour 也可见
+const DAY_MS = 24 * 3600 * 1000;
+const DATA_TIMEZONE_OFFSET = 8 * 3600 * 1000; // bangumi-data 按 GMT+8 编排年月
+const SEASON_EARLY_DAYS = 10; // 起止边界同步提前，避免相邻季度重叠或遗漏
 const DEFAULT_TIERS = [
   {label:"S", color:"#e74c3c"},
   {label:"A", color:"#e67e22"},
@@ -720,11 +722,25 @@ async function fetchBangumiData(){
   return j.items;
 }
 
-function deriveSeason(item){
-  if (!item || !item.begin) return null;
-  const m = /^(\d{4})-(\d{2})/.exec(item.begin);
+function getBeginTimestamp(item){
+  if (!item || typeof item.begin !== "string") return null;
+  // 有时间的 ISO 字符串必须带时区；仅有年月/日期时按北京时间零点处理。
+  const m = /^(\d{4})-(\d{2})(?:-(\d{2})(T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2}))?)?$/.exec(item.begin);
   if (!m) return null;
-  return { year: parseInt(m[1],10), season: Math.floor((parseInt(m[2],10)-1)/3)+1 };
+  const datePart = `${m[1]}-${m[2]}-${m[3] || "01"}`;
+  const date = new Date(datePart + "T00:00:00Z");
+  // Date 会把 2 月 30 日等日期进位，需核对原始日期。
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0,10) !== datePart) return null;
+  const time = m[4] ? Date.parse(item.begin) : date.getTime() - DATA_TIMEZONE_OFFSET;
+  return Number.isFinite(time) ? time : null;
+}
+function deriveSeason(item){
+  const time = getBeginTimestamp(item);
+  if (time === null) return null;
+  // 将北京时间首播日期加10天后取季度，等价于起止边界都提前10天。
+  // 例如6月21日至9月20日归入7月档，12月22日起归入下一年的1月档。
+  const date = new Date(time + DATA_TIMEZONE_OFFSET + SEASON_EARLY_DAYS * DAY_MS);
+  return { year:date.getUTCFullYear(), season:Math.floor(date.getUTCMonth() / 3) + 1 };
 }
 function extractBangumiId(item){
   if (!item || !item.sites) return null;
@@ -748,6 +764,7 @@ function buildYearSeasonIndex(items){
   const map = {};
   for (const it of items){
     if (it.type !== "tv" && it.type !== "web") continue; // 仅基于 tv+web 构建可选年份
+    if (!extractBangumiId(it)) continue;
     const ys = deriveSeason(it);
     if (!ys) continue;
     if (!map[ys.year]) map[ys.year] = new Set();
@@ -756,31 +773,16 @@ function buildYearSeasonIndex(items){
   return map;
 }
 function filterItems(items, year, season, typeFilter){
+  if (!Number.isInteger(year) || !Number.isInteger(season) || season < 0 || season > 4) return [];
   const types = Object.keys(typeFilter).filter(k => typeFilter[k]);
-  const dayMs = 24 * 3600 * 1000;
-  let filterStart, filterEnd;
-  if (season === 0){
-    // 整年：1月1日 - 10d 到 12月31日 + 10d
-    filterStart = new Date(year, 0, 1).getTime() - SEASON_TOLERANCE * dayMs;
-    filterEnd   = new Date(year, 11, 31).getTime() + SEASON_TOLERANCE * dayMs;
-  } else {
-    const startMonth = (season - 1) * 3;
-    const qStart = new Date(year, startMonth, 1);
-    const qEnd   = new Date(year, startMonth + 3, 0); // 下 cour 第 0 日 = 本 cour 末日
-    filterStart = qStart.getTime() - SEASON_TOLERANCE * dayMs;
-    filterEnd   = qEnd.getTime()   + SEASON_TOLERANCE * dayMs;
-  }
+  const seen = new Set();
   return items.filter(it => {
     if (!types.includes(it.type)) return false;
-    if (!it.begin) return false;
-    const m = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?/.exec(it.begin);
-    if (!m) return false;
-    const y = parseInt(m[1], 10);
-    const mo = m[2] ? parseInt(m[2], 10) : 1;
-    const d = m[3] ? parseInt(m[3], 10) : 1;
-    const t = new Date(y, mo - 1, d).getTime();
-    if (t < filterStart || t > filterEnd) return false;
-    if (!extractBangumiId(it)) return false;
+    const ys = deriveSeason(it);
+    if (!ys || ys.year !== year || (season !== 0 && ys.season !== season)) return false;
+    const id = extractBangumiId(it);
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
     return true;
   });
 }

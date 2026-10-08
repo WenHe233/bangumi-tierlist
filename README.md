@@ -21,6 +21,14 @@
 
 直接在浏览器里打开 `index.html` 即可，也可以丢到 GitHub Pages / 任意静态服务器上。
 
+季度按首播时间筛选，沿用 [bangumi-data 的 GMT+8 年月约定](https://github.com/bangumi-data/bangumi-data/blob/master/CONTRIBUTING.md)。季度起止边界均提前 10 天，例如「7月」包含北京时间 6 月 21 日至 9 月 20 日首播的作品，「10月」从 9 月 21 日开始，相邻季度没有交集。「整年」为四个季度结果的并集，同一 Bangumi ID 只显示一次。缺少月份或日期无效的条目不参与筛选。
+
+修改筛选逻辑后，可用 Node.js 运行回归测试：
+
+```sh
+node --test tests/season-filter.test.cjs
+```
+
 ## 致谢
 
 - 数据：[bangumi-data](https://github.com/bangumi-data/bangumi-data)
